@@ -68,47 +68,76 @@ export default function UploadForm({ onUploaded }) {
     const token = session?.access_token;
     if (!token) throw new Error('Not authenticated');
 
-    // 1. Get presigned URL from our API
-    const res = await fetch('/api/upload/presign', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        fileName: item.file.name,
-        fileType: item.file.type || 'audio/mpeg',
-        isCover: false,
-      }),
-    });
+    try {
+      // 1. Get presigned URL from API
+      const res = await fetch('/api/upload/presign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          fileName: item.file.name,
+          fileType: item.file.type || 'audio/mpeg',
+          isCover: false,
+        }),
+      });
 
-    if (!res.ok) throw new Error('Failed to get upload URL');
-    const { presignedUrl, key } = await res.json();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to get upload URL');
+      }
 
-    // 2. Upload directly to R2 with progress tracking
-    await uploadWithProgress(presignedUrl, item.file, item.file.type || 'audio/mpeg', (pct) => {
-      setItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: pct } : i));
-    });
+      const { presignedUrl, key } = await res.json();
 
-    // 3. Save metadata to DB
-    const metaRes = await fetch('/api/tracks', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        title: item.title || item.file.name,
-        artist: item.artist || null,
-        album: item.album || null,
-        file_key: key,
-        file_size: item.file.size,
-      }),
-    });
+      // 2. Upload directly to R2
+      await uploadWithProgress(presignedUrl, item.file, item.file.type || 'audio/mpeg', (pct) => {
+        setItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: pct } : i));
+      });
 
-    if (!metaRes.ok) throw new Error('Failed to save track metadata');
-    const track = await metaRes.json();
-    return track;
+      // 3. Save metadata to DB
+      const metaRes = await fetch('/api/tracks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: item.title || item.file.name,
+          artist: item.artist || null,
+          album: item.album || null,
+          file_key: key,
+          file_size: item.file.size,
+        }),
+      });
+
+      if (!metaRes.ok) throw new Error('Failed to save track metadata');
+      return await metaRes.json();
+    } catch (directErr) {
+      console.warn('Direct R2 upload failed (CORS or network), trying server fallback:', directErr);
+      
+      // Fallback: Upload through server API endpoint (bypasses browser CORS)
+      const formData = new FormData();
+      formData.append('file', item.file);
+      formData.append('title', item.title || item.file.name);
+      if (item.artist) formData.append('artist', item.artist);
+      if (item.album) formData.append('album', item.album);
+
+      const serverRes = await fetch('/api/upload/direct', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!serverRes.ok) {
+        const serverErr = await serverRes.json().catch(() => ({}));
+        throw new Error(serverErr.error || directErr.message || 'Upload failed');
+      }
+
+      return await serverRes.json();
+    }
   }
 
   async function uploadWithProgress(url, file, contentType, onProgress) {
