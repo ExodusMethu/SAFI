@@ -176,6 +176,20 @@ function App() {
     if (res.ok) fetchPlaylists();
   }
 
+  async function handleDeletePlaylist(playlistId) {
+    if (!confirm('Are you sure you want to delete this playlist?')) return;
+    const token = await getToken();
+    const res = await fetch(`/api/playlists/${playlistId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      setPlaylists(prev => prev.filter(p => p.id !== playlistId));
+      setView('home');
+      setSelectedPlaylist(null);
+    }
+  }
+
   async function handleDeleteTrack(track) {
     const token = await getToken();
     await fetch(`/api/tracks/${track.id}`, {
@@ -393,11 +407,20 @@ function App() {
 
             {view === 'playlist' && selectedPlaylist && (
               <>
-                <div className="section-header">
-                  <h1 className="section-title">{selectedPlaylist.name}</h1>
-                  {selectedPlaylist.description && (
-                    <span className="text-secondary text-sm">{selectedPlaylist.description}</span>
-                  )}
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h1 className="section-title">{selectedPlaylist.name}</h1>
+                    {selectedPlaylist.description && (
+                      <span className="text-secondary text-sm">{selectedPlaylist.description}</span>
+                    )}
+                  </div>
+                  <button 
+                    className="btn" 
+                    style={{ background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }}
+                    onClick={() => handleDeletePlaylist(selectedPlaylist.id)}
+                  >
+                    Delete Playlist
+                  </button>
                 </div>
                 <PlaylistView
                   playlist={playlists.find(p => p.id === selectedPlaylist.id) ?? selectedPlaylist}
