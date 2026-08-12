@@ -362,7 +362,8 @@ function App() {
   const filteredTracks = search
     ? tracks.filter(t =>
         t.title.toLowerCase().includes(search.toLowerCase()) ||
-        (t.artist ?? '').toLowerCase().includes(search.toLowerCase())
+        (t.artist ?? '').toLowerCase().includes(search.toLowerCase()) ||
+        (t.album ?? '').toLowerCase().includes(search.toLowerCase())
       )
     : tracks;
 
@@ -453,7 +454,7 @@ function App() {
             {view === 'library' && (
               <>
                 <div className="section-header">
-                  <h1 className="section-title">My Albums</h1>
+                  <h1 className="section-title">My Library</h1>
                 </div>
                 {tracks.length === 0 ? (
                   <div className="empty-state">
@@ -462,49 +463,7 @@ function App() {
                     <button className="btn btn-primary" onClick={() => setView('upload')}>Upload Music</button>
                   </div>
                 ) : (
-                  <div className="track-list">
-                    {Object.entries(
-                      filteredTracks.reduce((acc, t) => {
-                        const alb = t.album || 'Unknown Album';
-                        if (!acc[alb]) acc[alb] = [];
-                        acc[alb].push(t);
-                        return acc;
-                      }, {})
-                    ).map(([albumName, albumTracks]) => {
-                      const trackWithCover = albumTracks.find(t => t.cover_key);
-                      let coverUrl = null;
-                      if (trackWithCover) {
-                        coverUrl = trackWithCover.cover_key.startsWith('http') 
-                          ? trackWithCover.cover_key 
-                          : `${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${trackWithCover.cover_key}`;
-                      }
-
-                      return (
-                        <div 
-                          key={albumName} 
-                          className="track-list-item" 
-                          onClick={() => {
-                            setSearch(albumName);
-                            setView('home'); 
-                          }}
-                        >
-                          <div className="track-list-info" style={{ gridColumn: 'span 4' }}>
-                            {coverUrl ? (
-                              <img src={coverUrl} alt={albumName} className="track-list-thumb" loading="lazy" />
-                            ) : (
-                              <div className="track-list-thumb-placeholder">💿</div>
-                            )}
-                            <div className="track-list-meta">
-                              <div className="track-list-name">{albumName}</div>
-                              <div className="track-list-artist">
-                                {albumTracks.length} track{albumTracks.length !== 1 ? 's' : ''}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <TrackList tracks={filteredTracks} onContextMenu={openContextMenu} />
                 )}
               </>
             )}
