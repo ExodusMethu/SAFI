@@ -147,7 +147,7 @@ function App() {
 
   const fetchTracks = useCallback(async () => {
     setTracksLoading(true);
-    const res = await fetch('/api/tracks', { cache: 'no-store' });
+    const res = await fetch(`/api/tracks?t=${Date.now()}`, { cache: 'no-store' });
     if (res.ok) setTracks(await res.json());
     setTracksLoading(false);
   }, []);
@@ -155,7 +155,7 @@ function App() {
   const fetchPlaylists = useCallback(async () => {
     const token = await getToken();
     if (!token) return;
-    const res = await fetch('/api/playlists', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    const res = await fetch(`/api/playlists?t=${Date.now()}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
     if (res.ok) setPlaylists(await res.json());
   }, []);
 
