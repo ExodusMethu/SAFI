@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 import { AuthProvider, PlayerProvider, useAuth } from '@/components/Providers';
 import Player from '@/components/Player';
 import Sidebar from '@/components/Sidebar';
@@ -23,9 +23,14 @@ function LoginScreen() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
-    setLoading(false);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setError(error.message);
+    } catch (err) {
+      setError(err.message || 'Failed to sign in');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

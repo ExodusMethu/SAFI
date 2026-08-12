@@ -6,9 +6,10 @@ const AuthContext = createContext(null);
 
 function createSupabaseClient() {
   const { createClient } = require('@supabase/supabase-js');
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !url.startsWith('http')) return null;
+  url = url.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
   return createClient(url, key);
 }
 
