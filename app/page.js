@@ -473,7 +473,7 @@ function App() {
                 <div className="section-header">
                   <h1 className="section-title">Upload Music</h1>
                 </div>
-                <UploadForm playlists={playlists} onUploaded={track => {
+                <UploadForm playlists={playlists} existingTracks={tracks} onUploaded={track => {
                   setTracks(prev => [track, ...prev]);
                   fetchTracks();
                 }} />

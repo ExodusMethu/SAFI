@@ -24,7 +24,7 @@ async function extractMeta(file) {
   };
 }
 
-export default function UploadForm({ playlists = [], onUploaded }) {
+export default function UploadForm({ playlists = [], existingTracks = [], onUploaded }) {
   const [items, setItems] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState('');
@@ -46,7 +46,19 @@ export default function UploadForm({ playlists = [], onUploaded }) {
     // Extract metadata for each
     Promise.all(newItems.map(async (item) => {
       const meta = await extractMeta(item.file);
-      return { ...item, title: meta.title, artist: meta.artist, album: meta.album };
+      const isDuplicate = existingTracks.some(t => 
+        t.title.toLowerCase() === meta.title.toLowerCase() && 
+        (t.artist || '').toLowerCase() === meta.artist.toLowerCase()
+      );
+      
+      return { 
+        ...item, 
+        title: meta.title, 
+        artist: meta.artist, 
+        album: meta.album,
+        status: isDuplicate ? 'error' : 'pending',
+        error: isDuplicate ? 'Already in library' : null
+      };
     })).then(enriched => {
       setItems(prev => [...prev, ...enriched]);
     });
@@ -303,11 +315,13 @@ export default function UploadForm({ playlists = [], onUploaded }) {
                 {item.status === 'done' && <div className="upload-status status-done">✓ Uploaded successfully</div>}
                 {item.status === 'error' && <div className="upload-status status-error">✗ {item.error}</div>}
               </div>
-              {item.status === 'pending' && (
+              {(item.status === 'pending' || item.status === 'error') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <button className="btn btn-sm" style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)' }} onClick={() => handleAutoTag(item)} title="Auto-tag with iTunes">
-                    🪄 Auto-tag
-                  </button>
+                  {item.status === 'pending' && (
+                    <button className="btn btn-sm" style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)' }} onClick={() => handleAutoTag(item)} title="Auto-tag with iTunes">
+                      🪄 Auto-tag
+                    </button>
+                  )}
                   <button className="icon-btn" style={{ alignSelf: 'flex-end' }} onClick={() => removeItem(item.id)} title="Remove">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
