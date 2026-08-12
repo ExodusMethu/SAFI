@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET /api/tracks - list all tracks
 export async function GET() {
   const supabase = createServerSupabase();

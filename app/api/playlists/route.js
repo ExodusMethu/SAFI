@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase-server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 function getUserFromRequest(request) {
   const auth = request.headers.get('authorization');
   if (!auth) return null;
