@@ -37,7 +37,10 @@ export default function TrackList({ tracks, onContextMenu }) {
               )}
             </div>
 
-            <div className="track-list-info">
+            <div className="track-list-info" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {downloadedIds?.has(track.id) && (
+                <span style={{ color: 'var(--green)', fontSize: '14px', flexShrink: 0 }}>✅</span>
+              )}
               {coverUrl ? (
                 <img src={coverUrl} alt={track.title} className="track-list-thumb" loading="lazy" />
               ) : (
@@ -46,7 +49,6 @@ export default function TrackList({ tracks, onContextMenu }) {
               <div className="track-list-meta">
                 <div className="track-list-name">
                   {track.title}
-                  {downloadedIds?.has(track.id) && <span style={{ marginLeft: 4, color: 'var(--green)' }}>⬇</span>}
                 </div>
                 <div className="track-list-artist">{track.artist ?? 'Unknown Artist'}</div>
               </div>

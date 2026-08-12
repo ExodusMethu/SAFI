@@ -119,16 +119,10 @@ function PlaylistView({ playlist, allTracks, onContextMenu }) {
   }
 
   return (
-    <div className="track-grid">
-      {tracks.map(track => (
-        <TrackCard
-          key={track.id}
-          track={track}
-          allTracks={tracks}
-          onContextMenu={(e, t) => onContextMenu(e, t, playlist)}
-        />
-      ))}
-    </div>
+    <TrackList 
+      tracks={tracks}
+      onContextMenu={(e, t) => onContextMenu(e, t, playlist)} 
+    />
   );
 }
 
@@ -443,7 +437,7 @@ function App() {
                     <button className="btn btn-primary" onClick={() => setView('upload')}>Upload Music</button>
                   </div>
                 ) : (
-                  <div className="track-grid">
+                  <div className="track-list">
                     {Object.entries(
                       filteredTracks.reduce((acc, t) => {
                         const alb = t.album || 'Unknown Album';
@@ -451,17 +445,40 @@ function App() {
                         acc[alb].push(t);
                         return acc;
                       }, {})
-                    ).map(([albumName, albumTracks]) => (
-                      <AlbumCard 
-                        key={albumName} 
-                        albumName={albumName} 
-                        tracks={albumTracks} 
-                        onClick={() => {
-                          setSearch(albumName);
-                          setView('home'); // or create a specific album view
-                        }} 
-                      />
-                    ))}
+                    ).map(([albumName, albumTracks]) => {
+                      const trackWithCover = albumTracks.find(t => t.cover_key);
+                      let coverUrl = null;
+                      if (trackWithCover) {
+                        coverUrl = trackWithCover.cover_key.startsWith('http') 
+                          ? trackWithCover.cover_key 
+                          : `${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${trackWithCover.cover_key}`;
+                      }
+
+                      return (
+                        <div 
+                          key={albumName} 
+                          className="track-list-item" 
+                          onClick={() => {
+                            setSearch(albumName);
+                            setView('home'); 
+                          }}
+                        >
+                          <div className="track-list-info" style={{ gridColumn: 'span 4' }}>
+                            {coverUrl ? (
+                              <img src={coverUrl} alt={albumName} className="track-list-thumb" loading="lazy" />
+                            ) : (
+                              <div className="track-list-thumb-placeholder">💿</div>
+                            )}
+                            <div className="track-list-meta">
+                              <div className="track-list-name">{albumName}</div>
+                              <div className="track-list-artist">
+                                {albumTracks.length} track{albumTracks.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>

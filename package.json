@@ -10,6 +10,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "latest",
     "@aws-sdk/s3-request-presigner": "latest",
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
     "idb-keyval": "^6.3.0",
