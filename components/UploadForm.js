@@ -133,7 +133,10 @@ export default function UploadForm({ onUploaded }) {
 
       if (!serverRes.ok) {
         const serverErr = await serverRes.json().catch(() => ({}));
-        throw new Error(serverErr.error || directErr.message || 'Upload failed');
+        if (serverRes.status === 413) {
+          throw new Error('File > 4.5MB requires R2 CORS policy set to Allow Origins [*] in Cloudflare Dashboard');
+        }
+        throw new Error(serverErr.error || 'Upload failed. Please check R2 CORS settings in Cloudflare Dashboard.');
       }
 
       return await serverRes.json();
