@@ -1,0 +1,33 @@
+{
+  "name": "SAFI — Your Personal Music",
+  "short_name": "SAFI",
+  "description": "Your personal music streaming app",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Upload Music",
+      "url": "/upload",
+      "description": "Upload a new track"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "safi-music",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "latest",
+    "@aws-sdk/s3-request-presigner": "latest",
+    "@supabase/ssr": "latest",
+    "@supabase/supabase-js": "latest",
+    "music-metadata": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  }
+}
