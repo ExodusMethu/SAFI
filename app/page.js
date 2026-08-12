@@ -5,12 +5,15 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { AuthProvider, PlayerProvider, useAuth } from '@/components/Providers';
+import { AuthProvider, PlayerProvider, useAuth, usePlayer } from '@/components/Providers';
 import Player from '@/components/Player';
 import Sidebar from '@/components/Sidebar';
 import TrackCard from '@/components/TrackCard';
+import TrackList from '@/components/TrackList';
+import AlbumCard from '@/components/AlbumCard';
 import UploadForm from '@/components/UploadForm';
 import ContextMenu from '@/components/ContextMenu';
+import { fetchITunesMetadata } from '@/lib/metadata';
 
 // ─── Login Screen ──────────────────────────────────────────────────────────
 function LoginScreen() {
@@ -132,6 +135,7 @@ function PlaylistView({ playlist, allTracks, onContextMenu }) {
 // ─── Main App ──────────────────────────────────────────────────────────────
 function App() {
   const { user, loading } = useAuth();
+  const { handleDownloadTrack, handleRemoveDownload, downloadedIds } = usePlayer();
   const [tracks, setTracks] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [view, setView] = useState('home');
@@ -139,6 +143,55 @@ function App() {
   const [search, setSearch] = useState('');
   const [contextMenu, setContextMenu] = useState(null); // { x, y, track, playlistCtx }
   const [tracksLoading, setTracksLoading] = useState(true);
+
+  async function handleDownloadPlaylist(playlistId) {
+    const pl = playlists.find(p => p.id === playlistId);
+    if (!pl) return;
+    const plTracks = pl.playlist_tracks
+      .sort((a,b) => new Date(a.added_at) - new Date(b.added_at))
+      .map(pt => tracks.find(t => t.id === pt.track_id))
+      .filter(Boolean);
+    
+    // Download them all (sequentially or in parallel, sequential is safer for IndexedDB)
+    for (const track of plTracks) {
+      if (!downloadedIds.has(track.id)) {
+        await handleDownloadTrack(track);
+      }
+    }
+  }
+
+  async function handleAutoTagMissing() {
+    const token = await getToken();
+    const missing = tracks.filter(t => !t.cover_key);
+    if (missing.length === 0) {
+      alert("No tracks are missing artwork.");
+      return;
+    }
+    
+    // Process sequentially so we don't spam iTunes API
+    for (const t of missing) {
+      const query = `${t.title} ${t.artist || ''}`.trim();
+      const meta = await fetchITunesMetadata(query);
+      if (meta && meta.cover_url) {
+        const updates = {};
+        if (meta.cover_url) updates.cover_key = meta.cover_url;
+        if (meta.album && !t.album) updates.album = meta.album;
+        if (meta.title) updates.title = meta.title;
+        if (meta.artist && !t.artist) updates.artist = meta.artist;
+
+        await fetch(`/api/tracks/${t.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updates)
+        });
+      }
+    }
+    // Refresh tracks after done
+    fetchTracks();
+  }
 
   async function getToken() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -247,6 +300,21 @@ function App() {
       });
       if (playlists.length > 0) items.push({ divider: true });
     }
+    if (downloadedIds.has(track.id)) {
+      items.push({
+        label: 'Remove from Offline',
+        icon: '🗑',
+        action: () => handleRemoveDownload(track.id),
+      });
+    } else {
+      items.push({
+        label: 'Download for Offline',
+        icon: '⬇',
+        action: () => handleDownloadTrack(track),
+      });
+    }
+
+    items.push({ divider: true });
 
     items.push({
       label: 'Delete track',
@@ -282,7 +350,6 @@ function App() {
   const recentTracks = tracks;
 
   return (
-    <PlayerProvider>
       <div className="app-shell">
         {/* Sidebar */}
         <Sidebar
@@ -343,26 +410,19 @@ function App() {
                         {filteredTracks.length === 0 ? (
                           <div className="text-secondary text-sm">No tracks match your search.</div>
                         ) : (
-                          <div className="track-grid">
-                            {filteredTracks.map(t => (
-                              <TrackCard key={t.id} track={t} allTracks={filteredTracks} onContextMenu={openContextMenu} />
-                            ))}
-                          </div>
+                          <TrackList tracks={filteredTracks} onContextMenu={openContextMenu} />
                         )}
                       </section>
                     )}
 
                     {!search && (
                       <>
-                        <section className="mb-24">
+                        <section style={{ marginBottom: 40 }}>
                           <div className="section-header">
-                            <h1 className="section-title">Recently Added</h1>
+                            <h1 className="section-title">Recently Uploaded</h1>
+                            <button className="btn btn-primary btn-sm" onClick={handleAutoTagMissing}>🪄 Auto-tag Missing</button>
                           </div>
-                          <div className="track-grid">
-                            {recentTracks.map(t => (
-                              <TrackCard key={t.id} track={t} allTracks={recentTracks} onContextMenu={openContextMenu} />
-                            ))}
-                          </div>
+                          <TrackList tracks={recentTracks.slice(0, 50)} onContextMenu={openContextMenu} />
                         </section>
                       </>
                     )}
@@ -374,8 +434,7 @@ function App() {
             {view === 'library' && (
               <>
                 <div className="section-header">
-                  <h1 className="section-title">All Tracks</h1>
-                  <span className="text-secondary text-sm">{tracks.length} track{tracks.length !== 1 ? 's' : ''}</span>
+                  <h1 className="section-title">My Albums</h1>
                 </div>
                 {tracks.length === 0 ? (
                   <div className="empty-state">
@@ -385,8 +444,23 @@ function App() {
                   </div>
                 ) : (
                   <div className="track-grid">
-                    {filteredTracks.map(t => (
-                      <TrackCard key={t.id} track={t} allTracks={filteredTracks} onContextMenu={openContextMenu} />
+                    {Object.entries(
+                      filteredTracks.reduce((acc, t) => {
+                        const alb = t.album || 'Unknown Album';
+                        if (!acc[alb]) acc[alb] = [];
+                        acc[alb].push(t);
+                        return acc;
+                      }, {})
+                    ).map(([albumName, albumTracks]) => (
+                      <AlbumCard 
+                        key={albumName} 
+                        albumName={albumName} 
+                        tracks={albumTracks} 
+                        onClick={() => {
+                          setSearch(albumName);
+                          setView('home'); // or create a specific album view
+                        }} 
+                      />
                     ))}
                   </div>
                 )}
@@ -405,6 +479,44 @@ function App() {
               </>
             )}
 
+            {view === 'playlists' && (
+              <>
+                <div className="section-header">
+                  <h1 className="section-title">My Playlists</h1>
+                </div>
+                {playlists.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-icon">🎶</span>
+                    <div className="empty-title">No playlists yet</div>
+                    <div className="empty-sub">Create one from the sidebar (desktop) or track context menu</div>
+                  </div>
+                ) : (
+                  <div className="track-list">
+                    {playlists.map(pl => (
+                      <div 
+                        key={pl.id} 
+                        className="track-list-item" 
+                        onClick={() => {
+                          setSelectedPlaylist(pl);
+                          setView('playlist');
+                        }}
+                      >
+                        <div className="track-list-info" style={{ gridColumn: 'span 4' }}>
+                          <div className="track-list-thumb-placeholder">🎶</div>
+                          <div className="track-list-meta">
+                            <div className="track-list-name">{pl.name}</div>
+                            <div className="track-list-artist">
+                              {pl.playlist_tracks?.length || 0} track{pl.playlist_tracks?.length !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
             {view === 'playlist' && selectedPlaylist && (
               <>
                 <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -414,13 +526,22 @@ function App() {
                       <span className="text-secondary text-sm">{selectedPlaylist.description}</span>
                     )}
                   </div>
-                  <button 
-                    className="btn" 
-                    style={{ background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }}
-                    onClick={() => handleDeletePlaylist(selectedPlaylist.id)}
-                  >
-                    Delete Playlist
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="btn" 
+                      style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)' }}
+                      onClick={() => handleDownloadPlaylist(selectedPlaylist.id)}
+                    >
+                      ⬇ Download Playlist
+                    </button>
+                    <button 
+                      className="btn" 
+                      style={{ background: 'rgba(255,59,48,0.1)', color: '#ff3b30' }}
+                      onClick={() => handleDeletePlaylist(selectedPlaylist.id)}
+                    >
+                      Delete Playlist
+                    </button>
+                  </div>
                 </div>
                 <PlaylistView
                   playlist={playlists.find(p => p.id === selectedPlaylist.id) ?? selectedPlaylist}
@@ -449,6 +570,10 @@ function App() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
             Upload
           </button>
+          <button className={`mobile-nav-item ${view === 'playlists' || view === 'playlist' ? 'active' : ''}`} onClick={() => setView('playlists')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z"/></svg>
+            Playlists
+          </button>
         </nav>
 
         {/* Context menu */}
@@ -461,7 +586,6 @@ function App() {
           />
         )}
       </div>
-    </PlayerProvider>
   );
 }
 
@@ -469,7 +593,9 @@ function App() {
 export default function Page() {
   return (
     <AuthProvider>
-      <App />
+      <PlayerProvider>
+        <App />
+      </PlayerProvider>
     </AuthProvider>
   );
 }

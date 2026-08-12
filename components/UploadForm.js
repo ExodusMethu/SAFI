@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchITunesMetadata } from '@/lib/metadata';
 
 const ACCEPTED = '.mp3,.m4a,.wav,.ogg,.flac,.aac,.opus,.wma,.mp4,.m4b';
 
@@ -38,6 +39,7 @@ export default function UploadForm({ onUploaded }) {
       status: 'pending', // pending | uploading | done | error
       progress: 0,
       error: null,
+      cover_key: null,
     }));
 
     // Extract metadata for each
@@ -108,6 +110,7 @@ export default function UploadForm({ onUploaded }) {
           album: item.album || null,
           file_key: key,
           file_size: item.file.size,
+          cover_key: item.cover_key || null,
         }),
       });
 
@@ -122,6 +125,7 @@ export default function UploadForm({ onUploaded }) {
       formData.append('title', item.title || item.file.name);
       if (item.artist) formData.append('artist', item.artist);
       if (item.album) formData.append('album', item.album);
+      if (item.cover_key) formData.append('cover_key', item.cover_key);
 
       const serverRes = await fetch('/api/upload/direct', {
         method: 'POST',
@@ -171,6 +175,20 @@ export default function UploadForm({ onUploaded }) {
       } catch (err) {
         setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', error: err.message } : i));
       }
+    }
+  }
+
+  async function handleAutoTag(item) {
+    const query = `${item.title} ${item.artist}`.trim() || item.file.name.replace(/\.[^.]+$/, '');
+    const meta = await fetchITunesMetadata(query);
+    if (meta) {
+      setItems(prev => prev.map(i => i.id === item.id ? {
+        ...i,
+        title: meta.title || i.title,
+        artist: meta.artist || i.artist,
+        album: meta.album || i.album,
+        cover_key: meta.cover_url || i.cover_key,
+      } : i));
     }
   }
 
@@ -237,6 +255,7 @@ export default function UploadForm({ onUploaded }) {
                       value={item.album}
                       onChange={e => updateField(item.id, 'album', e.target.value)}
                     />
+                    <button className="btn btn-sm" onClick={() => handleAutoTag(item)} title="Auto-tag with iTunes">🪄</button>
                   </div>
                 )}
                 {item.status === 'uploading' && (
@@ -251,11 +270,16 @@ export default function UploadForm({ onUploaded }) {
                 {item.status === 'error' && <div className="upload-status status-error">✗ {item.error}</div>}
               </div>
               {item.status === 'pending' && (
-                <button className="icon-btn" onClick={() => removeItem(item.id)} title="Remove">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                  </svg>
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--accent-soft)', color: 'var(--accent-bright)' }} onClick={() => handleAutoTag(item)} title="Auto-tag with iTunes">
+                    🪄 Auto-tag
+                  </button>
+                  <button className="icon-btn" style={{ alignSelf: 'flex-end' }} onClick={() => removeItem(item.id)} title="Remove">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                    </svg>
+                  </button>
+                </div>
               )}
             </div>
           ))}

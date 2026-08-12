@@ -3,7 +3,7 @@
 import { usePlayer } from './Providers';
 
 export default function TrackCard({ track, allTracks, onContextMenu }) {
-  const { playTrack, currentTrack, isPlaying, getCoverUrl } = usePlayer();
+  const { playTrack, currentTrack, isPlaying, getCoverUrl, downloadedIds } = usePlayer();
   const isActive = currentTrack?.id === track.id;
   const coverUrl = getCoverUrl(track);
 
@@ -46,7 +46,10 @@ export default function TrackCard({ track, allTracks, onContextMenu }) {
         )}
       </div>
 
-      <div className="track-card-name">{track.title}</div>
+      <div className="track-card-name">
+        {track.title}
+        {downloadedIds?.has(track.id) && <span style={{ marginLeft: 4, color: 'var(--green)' }}>⬇</span>}
+      </div>
       <div className="track-card-artist">{track.artist ?? 'Unknown Artist'}</div>
 
       {onContextMenu && (

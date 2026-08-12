@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { getDownloadedTrackIds, getOfflineTrackBlobUrl, downloadTrackForOffline, removeTrackFromOffline } from '@/lib/offline';
 
 const AuthContext = createContext(null);
 
@@ -68,6 +69,11 @@ export function PlayerProvider({ children }) {
   const [volume, setVolume] = useState(1);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState('none'); // none | one | all
+  const [downloadedIds, setDownloadedIds] = useState(new Set());
+
+  useEffect(() => {
+    getDownloadedTrackIds().then(ids => setDownloadedIds(new Set(ids)));
+  }, []);
 
   const currentTrack = queue[currentIndex] ?? null;
 
@@ -79,6 +85,7 @@ export function PlayerProvider({ children }) {
 
   function getCoverUrl(track) {
     if (!track?.cover_key) return null;
+    if (track.cover_key.startsWith('http')) return track.cover_key;
     return `${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${track.cover_key}`;
   }
 
@@ -87,15 +94,27 @@ export function PlayerProvider({ children }) {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
 
-    const url = getAudioUrl(currentTrack);
-    if (!url) return;
+    let active = true;
 
-    audio.src = url;
-    audio.load();
+    async function loadAudio() {
+      let url = null;
+      if (downloadedIds.has(currentTrack.id)) {
+        url = await getOfflineTrackBlobUrl(currentTrack.id);
+      }
+      if (!url) url = getAudioUrl(currentTrack);
 
-    if (isPlaying) {
-      audio.play().catch(console.error);
+      if (!active) return;
+      if (!url) return;
+
+      audio.src = url;
+      audio.load();
+
+      if (isPlaying) {
+        audio.play().catch(console.error);
+      }
     }
+
+    loadAudio();
 
     // Media Session API (lock screen controls)
     if ('mediaSession' in navigator) {
@@ -122,6 +141,7 @@ export function PlayerProvider({ children }) {
         if (details.seekTime !== undefined) audio.currentTime = details.seekTime;
       });
     }
+    return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, queue]);
 
@@ -199,6 +219,23 @@ export function PlayerProvider({ children }) {
     setRepeat(r => r === 'none' ? 'all' : r === 'all' ? 'one' : 'none');
   }
 
+  async function handleDownloadTrack(track, onProgress) {
+    const url = getAudioUrl(track);
+    const success = await downloadTrackForOffline(track, url, onProgress);
+    if (success) {
+      setDownloadedIds(prev => new Set([...prev, track.id]));
+    }
+  }
+
+  async function handleRemoveDownload(trackId) {
+    await removeTrackFromOffline(trackId);
+    setDownloadedIds(prev => {
+      const next = new Set(prev);
+      next.delete(trackId);
+      return next;
+    });
+  }
+
   return (
     <PlayerContext.Provider value={{
       currentTrack, queue, currentIndex,
@@ -209,9 +246,11 @@ export function PlayerProvider({ children }) {
       playTrack, playQueue, togglePlay,
       nextTrack, prevTrack, seekTo,
       getCoverUrl,
+      downloadedIds, handleDownloadTrack, handleRemoveDownload,
     }}>
       <audio
         ref={audioRef}
+        preload="metadata"
         onTimeUpdate={e => setProgress(e.target.currentTime)}
         onDurationChange={e => setDuration(e.target.duration)}
         onEnded={nextTrack}

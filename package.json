@@ -12,6 +12,7 @@
     "@aws-sdk/s3-request-presigner": "latest",
     "@supabase/ssr": "latest",
     "@supabase/supabase-js": "latest",
+    "idb-keyval": "^6.3.0",
     "music-metadata": "latest",
     "next": "latest",
     "react": "latest",

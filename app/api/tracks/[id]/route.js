@@ -33,3 +33,29 @@ export async function DELETE(request, { params }) {
 
   return NextResponse.json({ success: true });
 }
+
+// PATCH /api/tracks/[id] - update track metadata
+export async function PATCH(request, { params }) {
+  const { id } = await params;
+  const supabase = createServerSupabase();
+  const body = await request.json();
+
+  const { title, artist, album, cover_key } = body;
+
+  const updates = {};
+  if (title !== undefined) updates.title = title;
+  if (artist !== undefined) updates.artist = artist;
+  if (album !== undefined) updates.album = album;
+  if (cover_key !== undefined) updates.cover_key = cover_key;
+
+  const { data, error } = await supabase
+    .from('tracks')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data);
+}
+
