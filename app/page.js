@@ -14,6 +14,7 @@ import AlbumCard from '@/components/AlbumCard';
 import UploadForm from '@/components/UploadForm';
 import ContextMenu from '@/components/ContextMenu';
 import { fetchITunesMetadata } from '@/lib/metadata';
+import { get, set } from 'idb-keyval';
 
 // ─── Login Screen ──────────────────────────────────────────────────────────
 function LoginScreen() {
@@ -194,16 +195,40 @@ function App() {
 
   const fetchTracks = useCallback(async () => {
     setTracksLoading(true);
-    const res = await fetch(`/api/tracks?t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) setTracks(await res.json());
+    try {
+      const res = await fetch(`/api/tracks?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setTracks(data);
+        await set('cached_tracks', data);
+      } else {
+        throw new Error('Network response was not ok');
+      }
+    } catch (err) {
+      console.warn('Fetch tracks failed, trying offline cache:', err);
+      const cached = await get('cached_tracks');
+      if (cached) setTracks(cached);
+    }
     setTracksLoading(false);
   }, []);
 
   const fetchPlaylists = useCallback(async () => {
-    const token = await getToken();
-    if (!token) return;
-    const res = await fetch(`/api/playlists?t=${Date.now()}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-    if (res.ok) setPlaylists(await res.json());
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/playlists?t=${Date.now()}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setPlaylists(data);
+        await set('cached_playlists', data);
+      } else {
+        throw new Error('Network response was not ok');
+      }
+    } catch (err) {
+      console.warn('Fetch playlists failed, trying offline cache:', err);
+      const cached = await get('cached_playlists');
+      if (cached) setPlaylists(cached);
+    }
   }, []);
 
   useEffect(() => {
