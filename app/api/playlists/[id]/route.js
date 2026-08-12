@@ -8,6 +8,7 @@ function getUserFromRequest(request) {
 }
 
 export async function DELETE(request, { params }) {
+  const { id } = await params;
   const token = getUserFromRequest(request);
   if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -21,7 +22,7 @@ export async function DELETE(request, { params }) {
   const { error } = await supabase
     .from('playlists')
     .delete()
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('user_id', user.id); // Ensure user owns the playlist
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

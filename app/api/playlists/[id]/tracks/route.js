@@ -16,7 +16,7 @@ export async function POST(request, { params }) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { track_id } = await request.json();
-  const { id: playlist_id } = params;
+  const { id: playlist_id } = await params;
 
   // Get current max position
   const { data: existing } = await supabase
@@ -47,7 +47,7 @@ export async function DELETE(request, { params }) {
 
   const { searchParams } = new URL(request.url);
   const track_id = searchParams.get('track_id');
-  const { id: playlist_id } = params;
+  const { id: playlist_id } = await params;
 
   const { error } = await supabase
     .from('playlist_tracks')

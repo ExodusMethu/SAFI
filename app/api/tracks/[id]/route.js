@@ -5,7 +5,7 @@ import { createServerSupabase } from '@/lib/supabase-server';
 
 // DELETE /api/tracks/[id]
 export async function DELETE(request, { params }) {
-  const { id } = params;
+  const { id } = await params;
   const supabase = createServerSupabase();
 
   // Fetch the track to get its file keys
