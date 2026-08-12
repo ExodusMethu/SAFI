@@ -1098,7 +1098,7 @@ img { display: block; }
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .app-shell { flex-direction: column; }
-  .scroll-area { padding: 16px; padding-bottom: calc(var(--player-height) + 16px); }
+  .scroll-area { padding: 16px; }
 
   .player-bar {
     grid-template-columns: 1fr;
@@ -1118,15 +1118,13 @@ img { display: block; }
   .track-list-album { display: none; }
 
   .mobile-nav {
-    position: fixed;
-    bottom: calc(var(--player-height) + 4px);
-    left: 0; right: 0;
     background: var(--bg-surface);
     border-top: 1px solid var(--border);
     display: flex;
     justify-content: space-around;
-    padding: 8px 0 4px;
-    z-index: 40;
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+    z-index: 60;
+    flex-shrink: 0;
   }
 
   .mobile-nav-item {
@@ -1143,7 +1141,6 @@ img { display: block; }
   }
 
   .mobile-nav-item.active { color: var(--accent-bright); }
-  .scroll-area { padding-bottom: calc(var(--player-height) + 60px); }
 }
 
 @media (min-width: 769px) {
