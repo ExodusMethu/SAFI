@@ -265,7 +265,7 @@ function App() {
       )
     : tracks;
 
-  const recentTracks = tracks.slice(0, 20);
+  const recentTracks = tracks;
 
   return (
     <PlayerProvider>
