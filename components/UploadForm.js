@@ -24,9 +24,10 @@ async function extractMeta(file) {
   };
 }
 
-export default function UploadForm({ onUploaded }) {
+export default function UploadForm({ playlists = [], onUploaded }) {
   const [items, setItems] = useState([]);
   const [dragging, setDragging] = useState(false);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState('');
   const inputRef = useRef(null);
 
   function addFiles(files) {
@@ -170,6 +171,22 @@ export default function UploadForm({ onUploaded }) {
       setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'uploading' } : i));
       try {
         const track = await uploadItem(item);
+        
+        // Add to selected playlist if one is chosen
+        if (selectedPlaylistId) {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            await fetch(`/api/playlists/${selectedPlaylistId}/tracks`, {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+              },
+              body: JSON.stringify({ track_id: track.id }),
+            });
+          }
+        }
+
         setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done' } : i));
         onUploaded?.(track);
       } catch (err) {
@@ -222,13 +239,30 @@ export default function UploadForm({ onUploaded }) {
       {/* Queue */}
       {items.length > 0 && (
         <div className="upload-queue">
-          <div className="flex items-center" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+          <div className="flex items-center" style={{ justifyContent: 'space-between', marginBottom: 16 }}>
             <span className="text-sm text-secondary">{items.length} file{items.length !== 1 ? 's' : ''} queued</span>
-            {pendingCount > 0 && (
-              <button className="btn btn-primary btn-sm" onClick={uploadAll}>
-                Upload {pendingCount} file{pendingCount !== 1 ? 's' : ''}
-              </button>
-            )}
+            
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              {playlists.length > 0 && (
+                <select 
+                  className="form-input" 
+                  style={{ width: 'auto', padding: '4px 8px' }}
+                  value={selectedPlaylistId}
+                  onChange={e => setSelectedPlaylistId(e.target.value)}
+                >
+                  <option value="">No Playlist</option>
+                  {playlists.map(pl => (
+                    <option key={pl.id} value={pl.id}>Add to: {pl.name}</option>
+                  ))}
+                </select>
+              )}
+
+              {pendingCount > 0 && (
+                <button className="btn btn-primary btn-sm" onClick={uploadAll}>
+                  Upload {pendingCount} file{pendingCount !== 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
           </div>
 
           {items.map(item => (
