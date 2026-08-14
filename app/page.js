@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { AuthProvider, PlayerProvider, useAuth, usePlayer } from '@/components/Providers';
 import Player from '@/components/Player';
+import ExpandedPlayer from '@/components/ExpandedPlayer';
 import Sidebar from '@/components/Sidebar';
 import TrackCard from '@/components/TrackCard';
 import TrackList from '@/components/TrackList';
@@ -130,7 +131,7 @@ function PlaylistView({ playlist, allTracks, onContextMenu }) {
 // ─── Main App ──────────────────────────────────────────────────────────────
 function App() {
   const { user, loading } = useAuth();
-  const { handleDownloadTrack, handleRemoveDownload, downloadedIds } = usePlayer();
+  const { handleDownloadTrack, handleRemoveDownload, downloadedIds, playTrack, currentTrack, openLyrics } = usePlayer();
   const [tracks, setTracks] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [view, setView] = useState('home');
@@ -298,7 +299,17 @@ function App() {
 
   function buildContextMenuItems(track, playlistCtx) {
     const items = [
-      { label: '▶ Play', icon: '▶', action: () => {} }, // handled by TrackCard itself
+      { label: '▶ Play', icon: '▶', action: () => playTrack(track, tracks) },
+      {
+        label: '🎤 View Lyrics',
+        icon: '🎤',
+        action: () => {
+          if (currentTrack?.id !== track.id) {
+            playTrack(track, tracks);
+          }
+          openLyrics();
+        }
+      },
       { divider: true },
     ];
 
@@ -586,6 +597,9 @@ function App() {
             onClose={() => setContextMenu(null)}
           />
         )}
+
+        {/* Spotify-style Expanded Player with Album Art, Lyrics, and Bottom Navigation */}
+        <ExpandedPlayer />
       </div>
   );
 }

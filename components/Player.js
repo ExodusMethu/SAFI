@@ -73,12 +73,31 @@ function IconVolume() {
   );
 }
 
+function IconLyrics() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2c1.1 0 2 .9 2 2v7.18c.61-.35 1.3-.58 2-.66V6h3V4h-5V2h-2zm-1 9c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4v-1.1c-.62-.57-1.42-.9-2.3-.9-1.07 0-2.03.48-2.7 1.25V11z"/>
+      <path d="M19 12v7c0 1.66-1.34 3-3 3H6c-1.66 0-3-1.34-3-3V7c0-1.66 1.34-3 3-3h6v2H6c-.55 0-1 .45-1 1v12c0 .55.45 1 1 1h10c.55 0 1-.45 1-1v-7h2z"/>
+    </svg>
+  );
+}
+
+function IconExpand() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+    </svg>
+  );
+}
+
 export default function Player() {
   const {
     currentTrack, isPlaying, progress, duration,
     volume, setVolume, shuffle, setShuffle,
     repeat, cycleRepeat, togglePlay, nextTrack, prevTrack, seekTo,
     getCoverUrl,
+    isExpanded, openPlayer, openLyrics,
+    lyricsData,
   } = usePlayer();
 
   if (!currentTrack) {
@@ -93,11 +112,16 @@ export default function Player() {
 
   const coverUrl = getCoverUrl(currentTrack);
   const seekPct = duration > 0 ? (progress / duration) * 100 : 0;
+  const hasLyrics = Boolean(lyricsData?.syncedLyrics || lyricsData?.plainLyrics);
 
   return (
     <div className="player-bar">
-      {/* Track info */}
-      <div className="player-track-info">
+      {/* Track info - click to open Spotify full player */}
+      <div 
+        className="player-track-info clickable" 
+        onClick={() => openPlayer('art')}
+        title="Open full player"
+      >
         {coverUrl ? (
           <img src={coverUrl} alt={currentTrack.title} className="player-art" />
         ) : (
@@ -159,8 +183,17 @@ export default function Player() {
         </div>
       </div>
 
-      {/* Volume */}
+      {/* Volume & Right Quick Actions */}
       <div className="player-right">
+        {/* Lyrics shortcut button */}
+        <button
+          className={`ctrl-btn lyrics-shortcut-btn ${hasLyrics ? 'has-lyrics' : ''}`}
+          onClick={openLyrics}
+          title={hasLyrics ? 'Show Lyrics' : 'Check Lyrics'}
+        >
+          <IconLyrics />
+        </button>
+
         <div className="volume-wrap">
           <button className="ctrl-btn" onClick={() => setVolume(v => v === 0 ? 1 : 0)} title="Mute">
             <IconVolume />
@@ -178,6 +211,15 @@ export default function Player() {
             }}
           />
         </div>
+
+        {/* Expand modal button */}
+        <button 
+          className="ctrl-btn" 
+          onClick={() => openPlayer('art')} 
+          title="Full screen player"
+        >
+          <IconExpand />
+        </button>
       </div>
     </div>
   );

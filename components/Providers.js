@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { getDownloadedTrackIds, getOfflineTrackBlobUrl, downloadTrackForOffline, removeTrackFromOffline } from '@/lib/offline';
+import { fetchTrackLyrics, findActiveLyricIndex } from '@/lib/lyrics';
 
 const AuthContext = createContext(null);
 
@@ -71,6 +72,12 @@ export function PlayerProvider({ children }) {
   const [repeat, setRepeat] = useState('none'); // none | one | all
   const [downloadedIds, setDownloadedIds] = useState(new Set());
 
+  // Spotify-style Expanded Player & Lyrics State
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [playerViewMode, setPlayerViewMode] = useState('art'); // 'art' | 'lyrics' | 'split'
+  const [lyricsData, setLyricsData] = useState(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+
   useEffect(() => {
     getDownloadedTrackIds().then(ids => setDownloadedIds(new Set(ids)));
   }, []);
@@ -88,6 +95,42 @@ export function PlayerProvider({ children }) {
     if (track.cover_key.startsWith('http')) return track.cover_key;
     return `${process.env.NEXT_PUBLIC_R2_PUBLIC_URL}/${track.cover_key}`;
   }
+
+  // Fetch lyrics whenever current track changes
+  useEffect(() => {
+    if (!currentTrack) {
+      setLyricsData(null);
+      setLyricsLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLyricsLoading(true);
+
+    fetchTrackLyrics(currentTrack)
+      .then(res => {
+        if (!active) return;
+        setLyricsData(res);
+      })
+      .catch(err => {
+        if (!active) return;
+        console.error('Lyrics fetch error:', err);
+        setLyricsData({ notFound: true, syncedLyrics: null, parsedLyrics: [], plainLyrics: null, isInstrumental: false });
+      })
+      .finally(() => {
+        if (active) setLyricsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist]);
+
+  // Compute active lyric line index from progress
+  const activeLyricIndex = useMemo(() => {
+    if (!lyricsData?.parsedLyrics || lyricsData.parsedLyrics.length === 0) return -1;
+    return findActiveLyricIndex(lyricsData.parsedLyrics, progress);
+  }, [lyricsData?.parsedLyrics, progress]);
 
   // Load new track
   useEffect(() => {
@@ -219,6 +262,20 @@ export function PlayerProvider({ children }) {
     setRepeat(r => r === 'none' ? 'all' : r === 'all' ? 'one' : 'none');
   }
 
+  function toggleExpanded() {
+    setIsExpanded(prev => !prev);
+  }
+
+  function openLyrics() {
+    setPlayerViewMode('lyrics');
+    setIsExpanded(true);
+  }
+
+  function openPlayer(mode = 'art') {
+    setPlayerViewMode(mode);
+    setIsExpanded(true);
+  }
+
   async function handleDownloadTrack(track, onProgress) {
     const url = getAudioUrl(track);
     const success = await downloadTrackForOffline(track, url, onProgress);
@@ -247,6 +304,10 @@ export function PlayerProvider({ children }) {
       nextTrack, prevTrack, seekTo,
       getCoverUrl,
       downloadedIds, handleDownloadTrack, handleRemoveDownload,
+      // Spotify player & lyrics states
+      isExpanded, setIsExpanded, toggleExpanded, openLyrics, openPlayer,
+      playerViewMode, setPlayerViewMode,
+      lyricsData, lyricsLoading, activeLyricIndex,
     }}>
       <audio
         ref={audioRef}
