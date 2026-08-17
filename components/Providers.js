@@ -1,8 +1,8 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { getDownloadedTrackIds, getOfflineTrackBlobUrl, downloadTrackForOffline, removeTrackFromOffline } from '@/lib/offline';
-import { fetchTrackLyrics, findActiveLyricIndex } from '@/lib/lyrics';
+import { fetchTrackLyrics } from '@/lib/lyrics';
 
 const AuthContext = createContext(null);
 
@@ -115,7 +115,7 @@ export function PlayerProvider({ children }) {
       .catch(err => {
         if (!active) return;
         console.error('Lyrics fetch error:', err);
-        setLyricsData({ notFound: true, syncedLyrics: null, parsedLyrics: [], plainLyrics: null, isInstrumental: false });
+        setLyricsData({ notFound: true, plainLyrics: null, isInstrumental: false });
       })
       .finally(() => {
         if (active) setLyricsLoading(false);
@@ -125,12 +125,6 @@ export function PlayerProvider({ children }) {
       active = false;
     };
   }, [currentTrack?.id, currentTrack?.title, currentTrack?.artist]);
-
-  // Compute active lyric line index from progress
-  const activeLyricIndex = useMemo(() => {
-    if (!lyricsData?.parsedLyrics || lyricsData.parsedLyrics.length === 0) return -1;
-    return findActiveLyricIndex(lyricsData.parsedLyrics, progress);
-  }, [lyricsData?.parsedLyrics, progress]);
 
   // Load new track
   useEffect(() => {
@@ -307,7 +301,7 @@ export function PlayerProvider({ children }) {
       // Spotify player & lyrics states
       isExpanded, setIsExpanded, toggleExpanded, openLyrics, openPlayer,
       playerViewMode, setPlayerViewMode,
-      lyricsData, lyricsLoading, activeLyricIndex,
+      lyricsData, lyricsLoading,
     }}>
       <audio
         ref={audioRef}

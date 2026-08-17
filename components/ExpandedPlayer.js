@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePlayer } from './Providers';
 
 function formatTime(s) {
@@ -107,6 +107,22 @@ function IconVolumeMute() {
   );
 }
 
+function IconCopy() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+    </svg>
+  );
+}
+
 export default function ExpandedPlayer() {
   const {
     currentTrack, isPlaying, progress, duration,
@@ -115,35 +131,18 @@ export default function ExpandedPlayer() {
     getCoverUrl,
     isExpanded, setIsExpanded,
     playerViewMode, setPlayerViewMode,
-    lyricsData, lyricsLoading, activeLyricIndex,
+    lyricsData, lyricsLoading,
     downloadedIds, handleDownloadTrack, handleRemoveDownload,
   } = usePlayer();
 
-  const lyricsContainerRef = useRef(null);
-  const activeLineRef = useRef(null);
-  const [userIsScrolling, setUserIsScrolling] = useState(false);
-  const scrollTimeoutRef = useRef(null);
+  const [copied, setCopied] = useState(false);
 
-  // Auto-scroll the active lyric line to center unless user is manually scrolling
-  useEffect(() => {
-    if (!isExpanded || playerViewMode === 'art') return;
-    if (userIsScrolling) return;
-
-    if (activeLineRef.current && lyricsContainerRef.current) {
-      activeLineRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
-    }
-  }, [activeLyricIndex, isExpanded, playerViewMode, userIsScrolling]);
-
-  // Handle user manual scroll detection
-  function handleLyricsScroll() {
-    setUserIsScrolling(true);
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-    scrollTimeoutRef.current = setTimeout(() => {
-      setUserIsScrolling(false);
-    }, 2500);
+  function handleCopyLyrics() {
+    if (!lyricsData?.plainLyrics) return;
+    navigator.clipboard?.writeText(lyricsData.plainLyrics).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   // Handle keyboard shortcuts when expanded
@@ -171,9 +170,7 @@ export default function ExpandedPlayer() {
 
   const coverUrl = getCoverUrl(currentTrack);
   const seekPct = duration > 0 ? (progress / duration) * 100 : 0;
-  const hasSynced = lyricsData?.parsedLyrics && lyricsData.parsedLyrics.length > 0;
-  const hasPlain = Boolean(lyricsData?.plainLyrics);
-  const hasAnyLyrics = hasSynced || hasPlain;
+  const hasLyrics = Boolean(lyricsData?.plainLyrics);
   const isDownloaded = downloadedIds?.has(currentTrack.id);
 
   return (
@@ -260,39 +257,40 @@ export default function ExpandedPlayer() {
                 </div>
               </div>
 
-              {/* Mini Lyrics Preview Card underneath Cover */}
+              {/* Mini Lyrics Preview / Action Card underneath Cover */}
               {lyricsLoading ? (
                 <div className="spotify-lyrics-preview loading">
                   <span className="preview-indicator">🎤 Finding lyrics…</span>
                 </div>
-              ) : hasSynced ? (
+              ) : hasLyrics ? (
                 <div 
                   className="spotify-lyrics-preview" 
                   onClick={() => setPlayerViewMode('lyrics')}
-                  title="Click to expand full synchronized lyrics"
+                  title="Click to view full lyrics"
                 >
                   <div className="preview-header">
-                    <span className="preview-badge">LYRICS</span>
-                    <span className="preview-expand-hint">Tap to expand ↗</span>
+                    <span className="preview-badge">LYRICS AVAILABLE</span>
+                    <span className="preview-expand-hint">View full lyrics ↗</span>
                   </div>
                   <div className="preview-lines">
-                    {activeLyricIndex >= 0 && lyricsData.parsedLyrics[activeLyricIndex] ? (
-                      <>
-                        <p className="preview-line active">{lyricsData.parsedLyrics[activeLyricIndex]?.text}</p>
-                        {lyricsData.parsedLyrics[activeLyricIndex + 1] && (
-                          <p className="preview-line next">{lyricsData.parsedLyrics[activeLyricIndex + 1]?.text}</p>
-                        )}
-                      </>
-                    ) : (
-                      <p className="preview-line next">{lyricsData.parsedLyrics[0]?.text || 'Lyrics available'}</p>
-                    )}
+                    <p className="preview-line static">
+                      {lyricsData.plainLyrics
+                        .split(/\r?\n/)
+                        .filter(l => l.trim().length > 0)
+                        .slice(0, 2)
+                        .join(' • ')}
+                    </p>
                   </div>
+                </div>
+              ) : lyricsData?.isInstrumental ? (
+                <div className="spotify-lyrics-preview instrumental">
+                  <span className="preview-indicator">🎵 Instrumental Track</span>
                 </div>
               ) : null}
             </div>
           )}
 
-          {/* ── 2. Lyrics View (Spotify Synchronized Karaoke) ── */}
+          {/* ── 2. Static Lyrics Reader View ── */}
           {playerViewMode === 'lyrics' && (
             <div className="spotify-lyrics-view">
               {lyricsLoading ? (
@@ -300,51 +298,54 @@ export default function ExpandedPlayer() {
                   <div className="spotify-spinner" />
                   <p>Searching lyrics…</p>
                 </div>
-              ) : hasSynced ? (
-                <div 
-                  className="spotify-lyrics-container" 
-                  ref={lyricsContainerRef}
-                  onScroll={handleLyricsScroll}
-                >
-                  <div className="spotify-lyrics-scroll">
-                    <div className="lyrics-spacer" />
-                    {lyricsData.parsedLyrics.map((line, idx) => {
-                      const isActive = idx === activeLyricIndex;
-                      const isPast = idx < activeLyricIndex;
+              ) : hasLyrics ? (
+                <div className="spotify-lyrics-container static-reader">
+                  {/* Lyrics Header Toolbar */}
+                  <div className="lyrics-toolbar">
+                    <div className="lyrics-toolbar-track">
+                      <span className="lyrics-toolbar-title">{currentTrack.title}</span>
+                      {currentTrack.artist && (
+                        <span className="lyrics-toolbar-artist">{currentTrack.artist}</span>
+                      )}
+                    </div>
+                    <button
+                      className={`lyrics-copy-btn ${copied ? 'copied' : ''}`}
+                      onClick={handleCopyLyrics}
+                      title="Copy full lyrics"
+                    >
+                      {copied ? <IconCheck /> : <IconCopy />}
+                      <span>{copied ? 'Copied!' : 'Copy'}</span>
+                    </button>
+                  </div>
 
-                      return (
-                        <div
-                          key={`${line.time}-${idx}`}
-                          ref={isActive ? activeLineRef : null}
-                          className={`spotify-lyric-line ${isActive ? 'active' : ''} ${isPast ? 'past' : 'upcoming'}`}
-                          onClick={() => seekTo(line.time)}
-                          title={`Jump to ${formatTime(line.time)}`}
-                        >
-                          <span className="lyric-text">{line.text || '♪'}</span>
-                        </div>
-                      );
-                    })}
-                    <div className="lyrics-spacer" />
+                  {/* Clean Static Lyrics Content */}
+                  <div className="spotify-static-lyrics-content">
+                    <div className="spotify-static-lyrics-text">
+                      {lyricsData.plainLyrics}
+                    </div>
                     <div className="lyrics-attribution">
                       <span>Lyrics provided by LRCLIB</span>
                     </div>
                   </div>
                 </div>
-              ) : hasPlain ? (
-                <div className="spotify-lyrics-container plain-lyrics-wrap">
-                  <div className="plain-lyrics-content">
-                    <p className="plain-lyrics-text">{lyricsData.plainLyrics}</p>
-                    <div className="lyrics-attribution">
-                      <span>Lyrics provided by LRCLIB</span>
-                    </div>
-                  </div>
+              ) : lyricsData?.isInstrumental ? (
+                <div className="spotify-lyrics-state empty">
+                  <div className="empty-lyrics-icon">🎵</div>
+                  <h3>Instrumental Track</h3>
+                  <p>This track is marked as instrumental with no lyrics.</p>
+                  <button 
+                    className="btn btn-primary btn-sm" 
+                    style={{ marginTop: 16 }}
+                    onClick={() => setPlayerViewMode('art')}
+                  >
+                    Back to Cover Art
+                  </button>
                 </div>
               ) : (
-                /* ── Graceful Fallback / Skip when no lyrics found ── */
                 <div className="spotify-lyrics-state empty">
                   <div className="empty-lyrics-icon">🎤</div>
                   <h3>No lyrics available</h3>
-                  <p>We couldn't find synchronized lyrics for "{currentTrack.title}".</p>
+                  <p>We couldn't find lyrics for "{currentTrack.title}".</p>
                   <button 
                     className="btn btn-primary btn-sm" 
                     style={{ marginTop: 16 }}
@@ -358,7 +359,7 @@ export default function ExpandedPlayer() {
           )}
         </div>
 
-        {/* ── Bottom Song Navigation & Controls (Spotify Style) ── */}
+        {/* ── Bottom Song Navigation & Controls ── */}
         <footer className="spotify-controls-footer">
           {/* Progress Seek Bar */}
           <div className="spotify-seek-container">

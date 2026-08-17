@@ -30,6 +30,17 @@ function cleanNoise(str) {
     .trim();
 }
 
+function extractCleanLyrics(lrc) {
+  if (!lrc || typeof lrc !== 'string') return null;
+  const clean = lrc
+    .split(/\r?\n/)
+    .filter(line => !/^\[[a-z]{2,8}:/i.test(line.trim()))
+    .map(line => line.replace(/\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/g, '').trim())
+    .join('\n')
+    .trim();
+  return clean.length > 0 ? clean : null;
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const rawTitle = searchParams.get('title') || '';
@@ -71,6 +82,7 @@ export async function GET(request) {
     if (response.ok) {
       const data = await response.json();
       if (data && (data.syncedLyrics || data.plainLyrics || data.instrumental)) {
+        const plainLyrics = data.plainLyrics || extractCleanLyrics(data.syncedLyrics);
         return NextResponse.json(
           {
             id: data.id,
@@ -79,9 +91,9 @@ export async function GET(request) {
             album: data.albumName,
             duration: data.duration,
             isInstrumental: Boolean(data.instrumental),
-            plainLyrics: data.plainLyrics || null,
-            syncedLyrics: data.syncedLyrics || null,
-            notFound: false,
+            plainLyrics: plainLyrics || null,
+            syncedLyrics: null,
+            notFound: !plainLyrics && !data.instrumental,
           },
           {
             headers: {
@@ -104,8 +116,9 @@ export async function GET(request) {
     if (response.ok) {
       const results = await response.json();
       if (Array.isArray(results) && results.length > 0) {
-        // Prefer result with syncedLyrics first, or first result
-        const matched = results.find(r => r.syncedLyrics) || results[0];
+        // Find best match with lyrics
+        const matched = results.find(r => r.plainLyrics || r.syncedLyrics) || results[0];
+        const plainLyrics = matched.plainLyrics || extractCleanLyrics(matched.syncedLyrics);
         return NextResponse.json(
           {
             id: matched.id,
@@ -114,9 +127,9 @@ export async function GET(request) {
             album: matched.albumName,
             duration: matched.duration,
             isInstrumental: Boolean(matched.instrumental),
-            plainLyrics: matched.plainLyrics || null,
-            syncedLyrics: matched.syncedLyrics || null,
-            notFound: false,
+            plainLyrics: plainLyrics || null,
+            syncedLyrics: null,
+            notFound: !plainLyrics && !matched.instrumental,
           },
           {
             headers: {

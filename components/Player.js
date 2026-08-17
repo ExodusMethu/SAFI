@@ -112,7 +112,7 @@ export default function Player() {
 
   const coverUrl = getCoverUrl(currentTrack);
   const seekPct = duration > 0 ? (progress / duration) * 100 : 0;
-  const hasLyrics = Boolean(lyricsData?.syncedLyrics || lyricsData?.plainLyrics);
+  const hasLyrics = Boolean(lyricsData?.plainLyrics);
 
   return (
     <div className="player-bar">
@@ -189,7 +189,7 @@ export default function Player() {
         <button
           className={`ctrl-btn lyrics-shortcut-btn ${hasLyrics ? 'has-lyrics' : ''}`}
           onClick={openLyrics}
-          title={hasLyrics ? 'Show Lyrics' : 'Check Lyrics'}
+          title={hasLyrics ? 'View Lyrics' : 'Lyrics'}
         >
           <IconLyrics />
         </button>
