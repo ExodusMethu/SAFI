@@ -14,6 +14,7 @@ import TrackList from '@/components/TrackList';
 import AlbumCard from '@/components/AlbumCard';
 import UploadForm from '@/components/UploadForm';
 import ContextMenu from '@/components/ContextMenu';
+import EditTrackModal from '@/components/EditTrackModal';
 import { fetchITunesMetadata } from '@/lib/metadata';
 import { get, set } from 'idb-keyval';
 
@@ -131,14 +132,47 @@ function PlaylistView({ playlist, allTracks, onContextMenu }) {
 // ─── Main App ──────────────────────────────────────────────────────────────
 function App() {
   const { user, loading } = useAuth();
-  const { handleDownloadTrack, handleRemoveDownload, downloadedIds, playTrack, currentTrack, openLyrics } = usePlayer();
+  const {
+    handleDownloadTrack, handleRemoveDownload, downloadedIds,
+    playTrack, currentTrack, openLyrics, getCoverUrl,
+    editingTrack, openEditModal, closeEditModal, updateTrack,
+  } = usePlayer();
   const [tracks, setTracks] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [view, setView] = useState('home');
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
   const [search, setSearch] = useState('');
   const [contextMenu, setContextMenu] = useState(null); // { x, y, track, playlistCtx }
-  const [tracksLoading, setTracksLoading] = useState(true);
+  const [tracksLoading, setTracksLoading] = useState(false);
+  const [isOffline, setIsOffline] = useState(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+
+  // 1. Listen for network status changes
+  useEffect(() => {
+    function handleOnline() { setIsOffline(false); }
+    function handleOffline() { setIsOffline(true); }
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // 2. Instant 0ms hydration from IndexedDB on startup (vital for offline launch on iOS)
+  useEffect(() => {
+    let mounted = true;
+    get('cached_tracks').then(cached => {
+      if (mounted && cached && cached.length > 0) {
+        setTracks(cached);
+      }
+    });
+    get('cached_playlists').then(cached => {
+      if (mounted && cached && cached.length > 0) {
+        setPlaylists(cached);
+      }
+    });
+    return () => { mounted = false; };
+  }, []);
 
   async function handleDownloadPlaylist(playlistId) {
     const pl = playlists.find(p => p.id === playlistId);
@@ -195,7 +229,14 @@ function App() {
   }
 
   const fetchTracks = useCallback(async () => {
-    setTracksLoading(true);
+    // If device is offline, read from IndexedDB directly without waiting on network
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const cached = await get('cached_tracks');
+      if (cached && cached.length > 0) setTracks(cached);
+      setTracksLoading(false);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/tracks?t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
@@ -206,14 +247,21 @@ function App() {
         throw new Error('Network response was not ok');
       }
     } catch (err) {
-      console.warn('Fetch tracks failed, trying offline cache:', err);
+      console.warn('Fetch tracks failed (offline fallback active):', err);
       const cached = await get('cached_tracks');
-      if (cached) setTracks(cached);
+      if (cached && cached.length > 0) setTracks(cached);
+    } finally {
+      setTracksLoading(false);
     }
-    setTracksLoading(false);
   }, []);
 
   const fetchPlaylists = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const cached = await get('cached_playlists');
+      if (cached && cached.length > 0) setPlaylists(cached);
+      return;
+    }
+
     try {
       const token = await getToken();
       if (!token) return;
@@ -226,18 +274,18 @@ function App() {
         throw new Error('Network response was not ok');
       }
     } catch (err) {
-      console.warn('Fetch playlists failed, trying offline cache:', err);
+      console.warn('Fetch playlists failed (offline fallback active):', err);
       const cached = await get('cached_playlists');
-      if (cached) setPlaylists(cached);
+      if (cached && cached.length > 0) setPlaylists(cached);
     }
   }, []);
 
   useEffect(() => {
-    if (user) {
+    if (user || isOffline) {
       fetchTracks();
       fetchPlaylists();
     }
-  }, [user, fetchTracks, fetchPlaylists]);
+  }, [user, isOffline, fetchTracks, fetchPlaylists]);
 
   async function handleCreatePlaylist(name) {
     const token = await getToken();
@@ -297,6 +345,50 @@ function App() {
     }
   }
 
+  async function handleSaveTrack(updatedData) {
+    const token = await getToken();
+    const res = await fetch(`/api/tracks/${updatedData.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        title: updatedData.title,
+        artist: updatedData.artist,
+        album: updatedData.album,
+        cover_key: updatedData.cover_key,
+      }),
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || 'Failed to update track details');
+    }
+
+    const savedTrack = await res.json();
+
+    // 1. Update tracks array in state & offline cache
+    setTracks(prev => {
+      const next = prev.map(t => (t.id === savedTrack.id ? { ...t, ...savedTrack } : t));
+      set('cached_tracks', next).catch(() => {});
+      return next;
+    });
+
+    // 2. Update active playlist view if open
+    if (selectedPlaylist) {
+      setSelectedPlaylist(prev => ({
+        ...prev,
+        playlist_tracks: (prev.playlist_tracks || []).map(pt =>
+          pt.track_id === savedTrack.id ? { ...pt, track: { ...pt.track, ...savedTrack } } : pt
+        ),
+      }));
+    }
+
+    // 3. Update player queue and current playing track
+    updateTrack(savedTrack);
+  }
+
   function buildContextMenuItems(track, playlistCtx) {
     const items = [
       { label: '▶ Play', icon: '▶', action: () => playTrack(track, tracks) },
@@ -309,6 +401,11 @@ function App() {
           }
           openLyrics();
         }
+      },
+      {
+        label: '✏️ Edit song details',
+        icon: '✏️',
+        action: () => openEditModal(track),
       },
       { divider: true },
     ];
@@ -360,15 +457,21 @@ function App() {
     setContextMenu({ x: e.clientX, y: e.clientY, track, playlistCtx });
   }
 
-  if (loading) {
+  // If loading and we don't even have cached tracks yet, show a sleek loading screen
+  if (loading && tracks.length === 0) {
     return (
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', color:'var(--text-muted)' }}>
-        Loading…
+      <div className="app-loading-screen">
+        <div className="app-loading-logo">🎵</div>
+        <div className="app-loading-spinner" />
+        <span className="app-loading-text">Loading SAFI…</span>
       </div>
     );
   }
 
-  if (!user) return <LoginScreen />;
+  // Only force login if online, no user session exists, and no cached/downloaded library is available
+  if (!user && !isOffline && tracks.length === 0 && downloadedIds.size === 0) {
+    return <LoginScreen />;
+  }
 
   const filteredTracks = search
     ? tracks.filter(t =>
@@ -396,12 +499,20 @@ function App() {
         <div className="main-content">
           {/* Topbar */}
           <header className="topbar">
-            <span className="topbar-title">
-              {view === 'home' && 'Home'}
-              {view === 'library' && 'My Library'}
-              {view === 'upload' && 'Upload Music'}
-              {view === 'playlist' && (selectedPlaylist?.name ?? 'Playlist')}
-            </span>
+            <div className="topbar-left-group">
+              <span className="topbar-title">
+                {view === 'home' && 'Home'}
+                {view === 'library' && 'My Library'}
+                {view === 'upload' && 'Upload Music'}
+                {view === 'playlist' && (selectedPlaylist?.name ?? 'Playlist')}
+              </span>
+              {isOffline && (
+                <div className="topbar-offline-badge" title="No internet connection • Playing downloaded songs from device">
+                  <span className="offline-pulse-dot" />
+                  <span>Offline Mode</span>
+                </div>
+              )}
+            </div>
 
             <div className="search-input-wrap">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -597,6 +708,15 @@ function App() {
             onClose={() => setContextMenu(null)}
           />
         )}
+
+        {/* Edit Track Metadata Modal */}
+        <EditTrackModal
+          track={editingTrack}
+          isOpen={Boolean(editingTrack)}
+          onClose={closeEditModal}
+          onSave={handleSaveTrack}
+          getCoverUrl={getCoverUrl}
+        />
 
         {/* Spotify-style Expanded Player with Album Art, Lyrics, and Bottom Navigation */}
         <ExpandedPlayer />

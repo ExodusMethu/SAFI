@@ -26,23 +26,90 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let resolved = false;
     const sb = getSupabase();
-    if (!sb) { setLoading(false); return; }
 
+    // 1. Check if we have a cached user profile from previous session
+    let fallbackUser = null;
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('safi_last_user');
+        if (stored) fallbackUser = JSON.parse(stored);
+      }
+    } catch (e) {}
+
+    // 2. iOS Failsafe Timeout: If Supabase auth hangs due to 0 connection, resolve in 800ms
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+        if (fallbackUser) {
+          setUser(fallbackUser);
+        } else if (isOffline) {
+          setUser({ id: 'offline-user', email: 'Offline Mode', isOffline: true });
+        }
+        setLoading(false);
+      }
+    }, 800);
+
+    if (!sb) {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        if (fallbackUser) setUser(fallbackUser);
+        setLoading(false);
+      }
+      return;
+    }
+
+    // 3. Query Supabase session
     sb.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        const currentUser = session?.user ?? fallbackUser ?? (typeof navigator !== 'undefined' && !navigator.onLine ? { id: 'offline-user', email: 'Offline Mode', isOffline: true } : null);
+        setUser(currentUser);
+        if (session?.user && typeof window !== 'undefined') {
+          try { localStorage.setItem('safi_last_user', JSON.stringify(session.user)); } catch (e) {}
+        }
+        setLoading(false);
+      }
+    }).catch(err => {
+      console.warn('Supabase getSession failed (offline mode active):', err);
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        if (fallbackUser) {
+          setUser(fallbackUser);
+        } else if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          setUser({ id: 'offline-user', email: 'Offline Mode', isOffline: true });
+        }
+        setLoading(false);
+      }
     });
 
     const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      if (session?.user) {
+        setUser(session.user);
+        if (typeof window !== 'undefined') {
+          try { localStorage.setItem('safi_last_user', JSON.stringify(session.user)); } catch (e) {}
+        }
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timer);
+      subscription?.unsubscribe?.();
+    };
   }, []);
 
   const signOut = useCallback(async () => {
-    await getSupabase()?.auth.signOut();
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('safi_last_user');
+      }
+      await getSupabase()?.auth.signOut();
+    } catch (e) {}
     setUser(null);
   }, []);
 
@@ -77,6 +144,9 @@ export function PlayerProvider({ children }) {
   const [playerViewMode, setPlayerViewMode] = useState('art'); // 'art' | 'lyrics' | 'split'
   const [lyricsData, setLyricsData] = useState(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
+
+  // Edit Track Metadata Modal State
+  const [editingTrack, setEditingTrack] = useState(null);
 
   useEffect(() => {
     getDownloadedTrackIds().then(ids => setDownloadedIds(new Set(ids)));
@@ -287,6 +357,24 @@ export function PlayerProvider({ children }) {
     });
   }
 
+  function openEditModal(track) {
+    setEditingTrack(track);
+  }
+
+  function closeEditModal() {
+    setEditingTrack(null);
+  }
+
+  function updateTrack(updatedTrack) {
+    if (!updatedTrack || !updatedTrack.id) return;
+    setQueue(prevQueue =>
+      prevQueue.map(t => (t.id === updatedTrack.id ? { ...t, ...updatedTrack } : t))
+    );
+    if (editingTrack?.id === updatedTrack.id) {
+      setEditingTrack(null);
+    }
+  }
+
   return (
     <PlayerContext.Provider value={{
       currentTrack, queue, currentIndex,
@@ -302,6 +390,8 @@ export function PlayerProvider({ children }) {
       isExpanded, setIsExpanded, toggleExpanded, openLyrics, openPlayer,
       playerViewMode, setPlayerViewMode,
       lyricsData, lyricsLoading,
+      // Edit modal & track sync
+      editingTrack, openEditModal, closeEditModal, updateTrack,
     }}>
       <audio
         ref={audioRef}
