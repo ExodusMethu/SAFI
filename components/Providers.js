@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { getDownloadedTrackIds, getOfflineTrackBlobUrl, downloadTrackForOffline, removeTrackFromOffline } from '@/lib/offline';
-import { fetchTrackLyrics } from '@/lib/lyrics';
+import { fetchTrackLyrics, saveTrackLyrics, fetchOnlineLyrics } from '@/lib/lyrics';
 
 const AuthContext = createContext(null);
 
@@ -147,6 +147,7 @@ export function PlayerProvider({ children }) {
 
   // Edit Track Metadata Modal State
   const [editingTrack, setEditingTrack] = useState(null);
+  const [editingTab, setEditingTab] = useState('details');
 
   useEffect(() => {
     getDownloadedTrackIds().then(ids => setDownloadedIds(new Set(ids)));
@@ -357,8 +358,9 @@ export function PlayerProvider({ children }) {
     });
   }
 
-  function openEditModal(track) {
+  function openEditModal(track, tab = 'details') {
     setEditingTrack(track);
+    setEditingTab(tab);
   }
 
   function closeEditModal() {
@@ -375,6 +377,20 @@ export function PlayerProvider({ children }) {
     }
   }
 
+  async function saveLyricsForTrack(track, lyricsText) {
+    if (!track) return null;
+    const result = await saveTrackLyrics(track, lyricsText);
+    
+    // If it's the current track, immediately update active lyrics state
+    if (currentTrack && (currentTrack.id === track.id || currentTrack.title === track.title)) {
+      setLyricsData(result);
+    }
+    
+    // Update track in queue with new lyrics
+    updateTrack({ ...track, lyrics: result?.plainLyrics });
+    return result;
+  }
+
   return (
     <PlayerContext.Provider value={{
       currentTrack, queue, currentIndex,
@@ -389,9 +405,10 @@ export function PlayerProvider({ children }) {
       // Spotify player & lyrics states
       isExpanded, setIsExpanded, toggleExpanded, openLyrics, openPlayer,
       playerViewMode, setPlayerViewMode,
-      lyricsData, lyricsLoading,
+      lyricsData, setLyricsData, lyricsLoading,
+      saveLyricsForTrack, fetchOnlineLyrics,
       // Edit modal & track sync
-      editingTrack, openEditModal, closeEditModal, updateTrack,
+      editingTrack, editingTab, openEditModal, closeEditModal, updateTrack,
     }}>
       <audio
         ref={audioRef}

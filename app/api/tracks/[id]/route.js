@@ -40,20 +40,37 @@ export async function PATCH(request, { params }) {
   const supabase = createServerSupabase();
   const body = await request.json();
 
-  const { title, artist, album, cover_key } = body;
+  const { title, artist, album, cover_key, lyrics } = body;
 
   const updates = {};
   if (title !== undefined) updates.title = title;
   if (artist !== undefined) updates.artist = artist;
   if (album !== undefined) updates.album = album;
   if (cover_key !== undefined) updates.cover_key = cover_key;
+  if (lyrics !== undefined) updates.lyrics = lyrics;
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('tracks')
     .update(updates)
     .eq('id', id)
     .select()
     .single();
+
+  // If lyrics column is missing in DB, retry without lyrics to avoid blocking other updates
+  if (error && error.message?.includes('lyrics') && lyrics !== undefined) {
+    console.warn('Supabase tracks table might be missing lyrics column. Run "ALTER TABLE tracks ADD COLUMN IF NOT EXISTS lyrics TEXT;"');
+    const fallbackUpdates = { ...updates };
+    delete fallbackUpdates.lyrics;
+    const retry = await supabase
+      .from('tracks')
+      .update(fallbackUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (!retry.error && retry.data) {
+      return NextResponse.json({ ...retry.data, lyrics });
+    }
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);

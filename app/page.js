@@ -135,7 +135,8 @@ function App() {
   const {
     handleDownloadTrack, handleRemoveDownload, downloadedIds,
     playTrack, currentTrack, openLyrics, getCoverUrl,
-    editingTrack, openEditModal, closeEditModal, updateTrack,
+    editingTrack, editingTab, openEditModal, closeEditModal, updateTrack,
+    saveLyricsForTrack,
   } = usePlayer();
   const [tracks, setTracks] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -358,6 +359,7 @@ function App() {
         artist: updatedData.artist,
         album: updatedData.album,
         cover_key: updatedData.cover_key,
+        lyrics: updatedData.lyrics,
       }),
     });
 
@@ -367,33 +369,42 @@ function App() {
     }
 
     const savedTrack = await res.json();
+    const finalTrack = {
+      ...savedTrack,
+      lyrics: updatedData.lyrics !== undefined ? updatedData.lyrics : savedTrack.lyrics,
+    };
 
-    // 1. Update tracks array in state & offline cache
+    // 1. If lyrics were updated, sync to lyrics cache & memory
+    if (updatedData.lyrics !== undefined) {
+      await saveLyricsForTrack(finalTrack, updatedData.lyrics);
+    }
+
+    // 2. Update tracks array in state & offline cache
     setTracks(prev => {
-      const next = prev.map(t => (t.id === savedTrack.id ? { ...t, ...savedTrack } : t));
+      const next = prev.map(t => (t.id === finalTrack.id ? { ...t, ...finalTrack } : t));
       set('cached_tracks', next).catch(() => {});
       return next;
     });
 
-    // 2. Update active playlist view if open
+    // 3. Update active playlist view if open
     if (selectedPlaylist) {
       setSelectedPlaylist(prev => ({
         ...prev,
         playlist_tracks: (prev.playlist_tracks || []).map(pt =>
-          pt.track_id === savedTrack.id ? { ...pt, track: { ...pt.track, ...savedTrack } } : pt
+          pt.track_id === finalTrack.id ? { ...pt, track: { ...pt.track, ...finalTrack } } : pt
         ),
       }));
     }
 
-    // 3. Update player queue and current playing track
-    updateTrack(savedTrack);
+    // 4. Update player queue and current playing track
+    updateTrack(finalTrack);
   }
 
   function buildContextMenuItems(track, playlistCtx) {
     const items = [
       { label: '▶ Play', icon: '▶', action: () => playTrack(track, tracks) },
       {
-        label: '🎤 View Lyrics',
+        label: '🎤 View / Edit Lyrics',
         icon: '🎤',
         action: () => {
           if (currentTrack?.id !== track.id) {
@@ -403,9 +414,9 @@ function App() {
         }
       },
       {
-        label: '✏️ Edit song details',
+        label: '✏️ Edit song details & lyrics',
         icon: '✏️',
-        action: () => openEditModal(track),
+        action: () => openEditModal(track, 'details'),
       },
       { divider: true },
     ];
@@ -716,6 +727,7 @@ function App() {
           onClose={closeEditModal}
           onSave={handleSaveTrack}
           getCoverUrl={getCoverUrl}
+          initialTab={editingTab || 'details'}
         />
 
         {/* Spotify-style Expanded Player with Album Art, Lyrics, and Bottom Navigation */}

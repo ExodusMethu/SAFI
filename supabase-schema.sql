@@ -10,9 +10,13 @@ CREATE TABLE IF NOT EXISTS tracks (
   duration    INTEGER,          -- seconds
   file_key    TEXT NOT NULL,    -- Cloudflare R2 object key
   cover_key   TEXT,             -- R2 key for album art
+  lyrics      TEXT,             -- Custom / cached plain lyrics
   file_size   BIGINT,           -- bytes
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration for existing databases:
+-- ALTER TABLE tracks ADD COLUMN IF NOT EXISTS lyrics TEXT;
 
 -- Playlists (per-user)
 CREATE TABLE IF NOT EXISTS playlists (
