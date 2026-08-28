@@ -20,20 +20,31 @@ import { get, set } from 'idb-keyval';
 
 // ─── Login Screen ──────────────────────────────────────────────────────────
 function LoginScreen() {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setMessage('');
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setError(error.message);
+      if (isSignUp) {
+        const { data, error: signUpErr } = await supabase.auth.signUp({ email, password });
+        if (signUpErr) throw signUpErr;
+        if (!data?.session) {
+          setMessage('Account created! Please check your email to verify or sign in.');
+        }
+      } else {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInErr) throw signInErr;
+      }
     } catch (err) {
-      setError(err.message || 'Failed to sign in');
+      setError(err.message || 'Failed to authenticate');
     } finally {
       setLoading(false);
     }
@@ -48,7 +59,27 @@ function LoginScreen() {
           <div className="login-sub">Your personal music stream</div>
         </div>
 
-        <form onSubmit={handleLogin}>
+        <div className="auth-tabs" style={{ marginBottom: 20 }}>
+          <button
+            type="button"
+            className={`auth-tab ${!isSignUp ? 'active' : ''}`}
+            onClick={() => { setIsSignUp(false); setError(''); setMessage(''); }}
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            className={`auth-tab ${isSignUp ? 'active' : ''}`}
+            onClick={() => { setIsSignUp(true); setError(''); setMessage(''); }}
+          >
+            Create Account
+          </button>
+        </div>
+
+        {error && <div className="login-error">{error}</div>}
+        {message && <div className="auth-success-msg" style={{ marginBottom: 16 }}>{message}</div>}
+
+        <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label" htmlFor="email">Email</label>
             <input
@@ -73,14 +104,13 @@ function LoginScreen() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
+              minLength={6}
+              autoComplete={isSignUp ? 'new-password' : 'current-password'}
             />
           </div>
 
-          {error && <div className="login-error">{error}</div>}
-
           <button type="submit" className="btn btn-primary w-full" style={{ marginTop:8 }} disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? (isSignUp ? 'Creating account…' : 'Signing in…') : (isSignUp ? 'Create Account' : 'Sign in')}
           </button>
         </form>
       </div>
@@ -131,7 +161,7 @@ function PlaylistView({ playlist, allTracks, onContextMenu }) {
 
 // ─── Main App ──────────────────────────────────────────────────────────────
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, openAuthModal, getToken } = useAuth();
   const {
     handleDownloadTrack, handleRemoveDownload, downloadedIds,
     playTrack, currentTrack, openLyrics, getCoverUrl,
@@ -192,6 +222,10 @@ function App() {
 
   async function handleAutoTagMissing() {
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      return;
+    }
     const missing = tracks.filter(t => !t.cover_key);
     if (missing.length === 0) {
       alert("No tracks are missing artwork.");
@@ -221,11 +255,6 @@ function App() {
     }
     // Refresh tracks after done
     fetchTracks();
-  }
-
-  async function getToken() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.access_token;
   }
 
   const fetchTracks = useCallback(async () => {
@@ -278,7 +307,7 @@ function App() {
       const cached = await get('cached_playlists');
       if (cached && cached.length > 0) setPlaylists(cached);
     }
-  }, []);
+  }, [getToken]);
 
   useEffect(() => {
     if (user || isOffline) {
@@ -289,6 +318,10 @@ function App() {
 
   async function handleCreatePlaylist(name) {
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      return;
+    }
     const res = await fetch('/api/playlists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -300,6 +333,10 @@ function App() {
   async function handleDeletePlaylist(playlistId) {
     if (!confirm('Are you sure you want to delete this playlist?')) return;
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      return;
+    }
     const res = await fetch(`/api/playlists/${playlistId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
@@ -312,7 +349,12 @@ function App() {
   }
 
   async function handleDeleteTrack(track) {
+    if (!confirm(`Are you sure you want to delete "${track.title}"?`)) return;
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      return;
+    }
     await fetch(`/api/tracks/${track.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
@@ -322,6 +364,10 @@ function App() {
 
   async function handleAddToPlaylist(track, playlist) {
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      return;
+    }
     await fetch(`/api/playlists/${playlist.id}/tracks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -332,6 +378,10 @@ function App() {
 
   async function handleRemoveFromPlaylist(track, playlist) {
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      return;
+    }
     await fetch(`/api/playlists/${playlist.id}/tracks?track_id=${track.id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
@@ -347,6 +397,10 @@ function App() {
 
   async function handleSaveTrack(updatedData) {
     const token = await getToken();
+    if (!token) {
+      openAuthModal();
+      throw new Error('Please sign in to update track details');
+    }
     const res = await fetch(`/api/tracks/${updatedData.id}`, {
       method: 'PATCH',
       headers: {
@@ -514,16 +568,28 @@ function App() {
               )}
             </div>
 
-            <div className="search-input-wrap">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-              </svg>
-              <input
-                className="search-input"
-                placeholder="Search tracks, artists…"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
+            <div className="topbar-right-group" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {(!user || user.isOffline) && !isOffline && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm topbar-signin-btn"
+                  onClick={openAuthModal}
+                >
+                  Sign In
+                </button>
+              )}
+
+              <div className="search-input-wrap">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                </svg>
+                <input
+                  className="search-input"
+                  placeholder="Search tracks, artists…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
+              </div>
             </div>
           </header>
 

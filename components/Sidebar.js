@@ -1,16 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from './Providers';
 
 export default function Sidebar({ view, setView, playlists, onCreatePlaylist, onSelectPlaylist, selectedPlaylist }) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, openAuthModal } = useAuth();
   const [showNewPlaylist, setShowNewPlaylist] = useState(false);
   const [newName, setNewName] = useState('');
 
   async function handleCreate() {
     if (!newName.trim()) return;
+    if (!user || user.isOffline) {
+      openAuthModal();
+      return;
+    }
     await onCreatePlaylist(newName.trim());
     setNewName('');
     setShowNewPlaylist(false);
@@ -54,7 +57,13 @@ export default function Sidebar({ view, setView, playlists, onCreatePlaylist, on
         <div className="nav-section-label" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           Playlists
           <button
-            onClick={() => setShowNewPlaylist(s => !s)}
+            onClick={() => {
+              if (!user || user.isOffline) {
+                openAuthModal();
+                return;
+              }
+              setShowNewPlaylist(s => !s);
+            }}
             style={{ color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer', fontSize:'1.1rem', lineHeight:1 }}
             title="New playlist"
           >+</button>
@@ -94,9 +103,25 @@ export default function Sidebar({ view, setView, playlists, onCreatePlaylist, on
 
       {/* User area */}
       <div className="user-area">
-        <div className="user-avatar">{initials}</div>
-        <span className="user-email">{user?.email}</span>
-        <button className="logout-btn" onClick={signOut}>Sign out</button>
+        {user && !user.isOffline ? (
+          <>
+            <div className="user-avatar">{initials}</div>
+            <div className="user-info-text" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+              <span className="user-email" title={user.email}>{user.email}</span>
+              <button className="logout-btn" onClick={signOut}>Sign out</button>
+            </div>
+          </>
+        ) : (
+          <div className="user-guest-block">
+            <div className="user-guest-info">
+              <div className="user-avatar guest-avatar">👤</div>
+              <span className="user-email">{user?.isOffline ? 'Offline Mode' : 'Not signed in'}</span>
+            </div>
+            <button className="btn btn-primary btn-sm user-signin-btn" onClick={openAuthModal}>
+              Sign In
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

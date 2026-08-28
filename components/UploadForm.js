@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchITunesMetadata } from '@/lib/metadata';
+import { useAuth } from '@/components/Providers';
 
 const ACCEPTED = '.mp3,.m4a,.wav,.ogg,.flac,.aac,.opus,.wma,.mp4,.m4b';
 
@@ -25,6 +26,7 @@ async function extractMeta(file) {
 }
 
 export default function UploadForm({ playlists = [], existingTracks = [], onUploaded }) {
+  const { user, openAuthModal } = useAuth();
   const [items, setItems] = useState([]);
   const [dragging, setDragging] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState('');
@@ -81,7 +83,10 @@ export default function UploadForm({ playlists = [], existingTracks = [], onUplo
   async function uploadItem(item) {
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token;
-    if (!token) throw new Error('Not authenticated');
+    if (!token) {
+      openAuthModal?.();
+      throw new Error('Not authenticated. Please sign in to upload.');
+    }
 
     try {
       // 1. Get presigned URL from API
@@ -130,6 +135,9 @@ export default function UploadForm({ playlists = [], existingTracks = [], onUplo
       if (!metaRes.ok) throw new Error('Failed to save track metadata');
       return await metaRes.json();
     } catch (directErr) {
+      if (directErr.message?.includes('Not authenticated')) {
+        throw directErr;
+      }
       console.warn('Direct R2 upload failed (CORS or network), trying server fallback:', directErr);
       
       // Fallback: Upload through server API endpoint (bypasses browser CORS)
@@ -178,21 +186,27 @@ export default function UploadForm({ playlists = [], existingTracks = [], onUplo
   }
 
   async function uploadAll() {
-    const pending = items.filter(i => i.status === 'pending');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      openAuthModal?.();
+      return;
+    }
+
+    const pending = items.filter(i => i.status === 'pending' || (i.status === 'error' && i.error?.includes('authenticated')));
     for (const item of pending) {
-      setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'uploading' } : i));
+      setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'uploading', error: null } : i));
       try {
         const track = await uploadItem(item);
         
         // Add to selected playlist if one is chosen
         if (selectedPlaylistId) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session?.access_token) {
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          if (currentSession?.access_token) {
             await fetch(`/api/playlists/${selectedPlaylistId}/tracks`, {
               method: 'POST',
               headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${session.access_token}`
+                'Authorization': `Bearer ${currentSession.access_token}`
               },
               body: JSON.stringify({ track_id: track.id }),
             });
@@ -221,10 +235,24 @@ export default function UploadForm({ playlists = [], existingTracks = [], onUplo
     }
   }
 
-  const pendingCount = items.filter(i => i.status === 'pending').length;
+  const pendingCount = items.filter(i => i.status === 'pending' || (i.status === 'error' && i.error?.includes('authenticated'))).length;
 
   return (
     <div>
+      {/* Auth Banner if not signed in */}
+      {(!user || user.isOffline) && (
+        <div className="auth-required-banner">
+          <div className="auth-required-icon">🔒</div>
+          <div className="auth-required-info">
+            <div className="auth-required-title">Sign in required to upload music</div>
+            <div className="auth-required-desc">You need to be signed in to upload songs and store audio files in your cloud library.</div>
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={openAuthModal}>
+            Sign In
+          </button>
+        </div>
+      )}
+
       {/* Drop zone */}
       <div
         className={`upload-area ${dragging ? 'drag-over' : ''}`}
@@ -313,7 +341,21 @@ export default function UploadForm({ playlists = [], existingTracks = [], onUplo
                   </>
                 )}
                 {item.status === 'done' && <div className="upload-status status-done">✓ Uploaded successfully</div>}
-                {item.status === 'error' && <div className="upload-status status-error">✗ {item.error}</div>}
+                {item.status === 'error' && (
+                  <div className="upload-status status-error" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>✗ {item.error}</span>
+                    {item.error?.toLowerCase().includes('authenticated') && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{ padding: '3px 10px', fontSize: '0.75rem', height: 'auto' }}
+                        onClick={openAuthModal}
+                      >
+                        Sign In & Retry
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               {(item.status === 'pending' || item.status === 'error') && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

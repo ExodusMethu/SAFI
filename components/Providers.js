@@ -3,31 +3,30 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { getDownloadedTrackIds, getOfflineTrackBlobUrl, downloadTrackForOffline, removeTrackFromOffline } from '@/lib/offline';
 import { fetchTrackLyrics } from '@/lib/lyrics';
+import { supabase } from '@/lib/supabase';
+import AuthModal from '@/components/AuthModal';
 
 const AuthContext = createContext(null);
-
-function createSupabaseClient() {
-  const { createClient } = require('@supabase/supabase-js');
-  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !url.startsWith('http')) return null;
-  url = url.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
-  return createClient(url, key);
-}
-
-let _supabase = null;
-function getSupabase() {
-  if (!_supabase) _supabase = createSupabaseClient();
-  return _supabase;
-}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  const openAuthModal = useCallback(() => setAuthModalOpen(true), []);
+  const closeAuthModal = useCallback(() => setAuthModalOpen(false), []);
+
+  const getToken = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session?.access_token || null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     let resolved = false;
-    const sb = getSupabase();
 
     // 1. Check if we have a cached user profile from previous session
     let fallbackUser = null;
@@ -52,18 +51,8 @@ export function AuthProvider({ children }) {
       }
     }, 800);
 
-    if (!sb) {
-      if (!resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        if (fallbackUser) setUser(fallbackUser);
-        setLoading(false);
-      }
-      return;
-    }
-
     // 3. Query Supabase session
-    sb.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!resolved) {
         resolved = true;
         clearTimeout(timer);
@@ -88,11 +77,16 @@ export function AuthProvider({ children }) {
       }
     });
 
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUser(session.user);
         if (typeof window !== 'undefined') {
           try { localStorage.setItem('safi_last_user', JSON.stringify(session.user)); } catch (e) {}
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        if (typeof window !== 'undefined') {
+          try { localStorage.removeItem('safi_last_user'); } catch (e) {}
         }
       }
     });
@@ -108,14 +102,15 @@ export function AuthProvider({ children }) {
       if (typeof window !== 'undefined') {
         localStorage.removeItem('safi_last_user');
       }
-      await getSupabase()?.auth.signOut();
+      await supabase.auth.signOut();
     } catch (e) {}
     setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signOut, authModalOpen, openAuthModal, closeAuthModal, getToken }}>
       {children}
+      <AuthModal isOpen={authModalOpen} onClose={closeAuthModal} />
     </AuthContext.Provider>
   );
 }
