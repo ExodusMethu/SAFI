@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePlayer } from './Providers';
+import { supabase } from '@/lib/supabase';
 
 function formatTime(s) {
   if (!s || isNaN(s)) return '0:00';
@@ -125,8 +126,16 @@ function IconCheck() {
 
 function IconEdit() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+    </svg>
+  );
+}
+
+function IconSparkles() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M7 2v3h3v2H7v3H5V7H2V5h3V2h2zm10 0l2.5 5.5L25 10l-5.5 2.5L17 18l-2.5-5.5L9 10l5.5-2.5L17 2zm-5 13l1.5 3.5L17 20l-3.5 1.5L12 25l-1.5-3.5L7 20l3.5-1.5L12 15z"/>
     </svg>
   );
 }
@@ -140,11 +149,17 @@ export default function ExpandedPlayer() {
     isExpanded, setIsExpanded,
     playerViewMode, setPlayerViewMode,
     lyricsData, lyricsLoading,
+    saveLyricsForTrack, fetchOnlineLyrics,
     downloadedIds, handleDownloadTrack, handleRemoveDownload,
     openEditModal,
   } = usePlayer();
 
   const [copied, setCopied] = useState(false);
+  const [isEditingLyrics, setIsEditingLyrics] = useState(false);
+  const [editableLyrics, setEditableLyrics] = useState('');
+  const [isSavingLyrics, setIsSavingLyrics] = useState(false);
+  const [fetchingOnline, setFetchingOnline] = useState(false);
+  const [lyricsNotice, setLyricsNotice] = useState(null);
 
   function handleCopyLyrics() {
     if (!lyricsData?.plainLyrics) return;
@@ -154,26 +169,110 @@ export default function ExpandedPlayer() {
     });
   }
 
+  function startEditingLyrics() {
+    setEditableLyrics(lyricsData?.plainLyrics || currentTrack?.lyrics || '');
+    setLyricsNotice(null);
+    setIsEditingLyrics(true);
+  }
+
+  function cancelEditingLyrics() {
+    setIsEditingLyrics(false);
+    setLyricsNotice(null);
+  }
+
+  async function handleFetchLRCLIBLyrics() {
+    if (!currentTrack) return;
+    setFetchingOnline(true);
+    setLyricsNotice(null);
+    try {
+      const res = await fetchOnlineLyrics(currentTrack);
+      if (res?.plainLyrics) {
+        setEditableLyrics(res.plainLyrics);
+        setLyricsNotice('Fetched lyrics from LRCLIB.');
+      } else if (res?.isInstrumental) {
+        setLyricsNotice('Track is marked as instrumental in LRCLIB.');
+      } else {
+        setLyricsNotice('No online lyrics found for this track in LRCLIB.');
+      }
+    } catch (err) {
+      setLyricsNotice('Failed to fetch from LRCLIB.');
+    } finally {
+      setFetchingOnline(false);
+    }
+  }
+
+  async function handleSaveEditedLyrics() {
+    if (!currentTrack) return;
+    setIsSavingLyrics(true);
+    try {
+      const trimmed = editableLyrics.trim();
+
+      // 1. Update local cache + memory + player context
+      await saveLyricsForTrack(currentTrack, trimmed);
+
+      // 2. Persist to Supabase if track has an ID and user session is active
+      if (currentTrack.id) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          await fetch(`/api/tracks/${currentTrack.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ lyrics: trimmed }),
+          });
+        } catch (apiErr) {
+          console.warn('Could not sync lyrics to Supabase:', apiErr);
+        }
+      }
+
+      setLyricsNotice('Lyrics saved successfully!');
+      setTimeout(() => setLyricsNotice(null), 2500);
+      setIsEditingLyrics(false);
+    } catch (err) {
+      console.error('Failed to save lyrics:', err);
+      setLyricsNotice('Failed to save lyrics.');
+    } finally {
+      setIsSavingLyrics(false);
+    }
+  }
+
   // Handle keyboard shortcuts when expanded
   useEffect(() => {
     if (!isExpanded) return;
 
     function handleKeyDown(e) {
+      // If typing in the lyrics editor textarea, don't trigger playback shortcuts
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') {
+        if (e.key === 'Escape' && isEditingLyrics) {
+          setIsEditingLyrics(false);
+        }
+        return;
+      }
+
       if (e.key === 'Escape') {
         setIsExpanded(false);
-      } else if (e.code === 'Space' && e.target.tagName !== 'INPUT') {
+      } else if (e.code === 'Space') {
         e.preventDefault();
         togglePlay();
-      } else if (e.key === 'ArrowRight' && e.target.tagName !== 'INPUT') {
+      } else if (e.key === 'ArrowRight') {
         seekTo(Math.min(duration, progress + 5));
-      } else if (e.key === 'ArrowLeft' && e.target.tagName !== 'INPUT') {
+      } else if (e.key === 'ArrowLeft') {
         seekTo(Math.max(0, progress - 5));
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isExpanded, togglePlay, seekTo, duration, progress, setIsExpanded]);
+  }, [isExpanded, togglePlay, seekTo, duration, progress, setIsExpanded, isEditingLyrics]);
+
+  // Reset edit state when track changes
+  useEffect(() => {
+    setIsEditingLyrics(false);
+    setLyricsNotice(null);
+  }, [currentTrack?.id]);
 
   if (!isExpanded || !currentTrack) return null;
 
@@ -181,6 +280,7 @@ export default function ExpandedPlayer() {
   const seekPct = duration > 0 ? (progress / duration) * 100 : 0;
   const hasLyrics = Boolean(lyricsData?.plainLyrics);
   const isDownloaded = downloadedIds?.has(currentTrack.id);
+  const editLineCount = editableLyrics.split(/\r?\n/).filter(l => l.trim().length > 0).length;
 
   return (
     <div className="spotify-player-overlay">
@@ -259,7 +359,7 @@ export default function ExpandedPlayer() {
                   <button
                     className="spotify-icon-btn"
                     onClick={() => openEditModal(currentTrack)}
-                    title="Edit song details"
+                    title="Edit song details & lyrics"
                   >
                     <IconEdit />
                   </button>
@@ -285,7 +385,9 @@ export default function ExpandedPlayer() {
                   title="Click to view full lyrics"
                 >
                   <div className="preview-header">
-                    <span className="preview-badge">LYRICS AVAILABLE</span>
+                    <span className="preview-badge">
+                      {lyricsData.isCustom ? 'CUSTOM LYRICS' : 'LYRICS AVAILABLE'}
+                    </span>
                     <span className="preview-expand-hint">View full lyrics ↗</span>
                   </div>
                   <div className="preview-lines">
@@ -299,22 +401,120 @@ export default function ExpandedPlayer() {
                   </div>
                 </div>
               ) : lyricsData?.isInstrumental ? (
-                <div className="spotify-lyrics-preview instrumental">
-                  <span className="preview-indicator">🎵 Instrumental Track</span>
+                <div 
+                  className="spotify-lyrics-preview instrumental"
+                  onClick={() => {
+                    setPlayerViewMode('lyrics');
+                    startEditingLyrics();
+                  }}
+                  title="Click to add custom lyrics"
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="preview-header">
+                    <span className="preview-indicator">🎵 Instrumental Track</span>
+                    <span className="preview-expand-hint">Add lyrics +</span>
+                  </div>
                 </div>
-              ) : null}
+              ) : (
+                <div 
+                  className="spotify-lyrics-preview" 
+                  onClick={() => {
+                    setPlayerViewMode('lyrics');
+                    startEditingLyrics();
+                  }}
+                  title="Click to add lyrics"
+                >
+                  <div className="preview-header">
+                    <span className="preview-indicator">🎤 No lyrics found</span>
+                    <span className="preview-expand-hint">Add lyrics +</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── 2. Static Lyrics Reader View ── */}
+          {/* ── 2. Lyrics View (Reader & Editor) ── */}
           {playerViewMode === 'lyrics' && (
             <div className="spotify-lyrics-view">
+              {lyricsNotice && (
+                <div className="lyrics-floating-toast">
+                  <span>{lyricsNotice}</span>
+                </div>
+              )}
+
               {lyricsLoading ? (
                 <div className="spotify-lyrics-state">
                   <div className="spotify-spinner" />
                   <p>Searching lyrics…</p>
                 </div>
+              ) : isEditingLyrics ? (
+                /* ── Lyrics In-Place Editor Mode ── */
+                <div className="spotify-lyrics-container lyrics-editor-container">
+                  <div className="lyrics-toolbar lyrics-editor-toolbar">
+                    <div className="lyrics-toolbar-track">
+                      <span className="lyrics-toolbar-title">Edit Lyrics</span>
+                      <span className="lyrics-toolbar-artist">
+                        {editLineCount} lines • {editableLyrics.trim().length} chars
+                      </span>
+                    </div>
+
+                    <div className="lyrics-editor-actions">
+                      <button
+                        type="button"
+                        className="lyrics-tool-btn"
+                        onClick={handleFetchLRCLIBLyrics}
+                        disabled={fetchingOnline || isSavingLyrics}
+                        title="Fetch lyrics from LRCLIB"
+                      >
+                        <IconSparkles />
+                        <span>{fetchingOnline ? 'Fetching…' : 'Fetch LRCLIB'}</span>
+                      </button>
+
+                      {editableLyrics && (
+                        <button
+                          type="button"
+                          className="lyrics-tool-btn danger"
+                          onClick={() => setEditableLyrics('')}
+                          disabled={isSavingLyrics}
+                          title="Clear lyrics"
+                        >
+                          <span>Clear</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        className="lyrics-tool-btn"
+                        onClick={cancelEditingLyrics}
+                        disabled={isSavingLyrics}
+                      >
+                        <span>Cancel</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="lyrics-tool-btn save"
+                        onClick={handleSaveEditedLyrics}
+                        disabled={isSavingLyrics}
+                      >
+                        <span>{isSavingLyrics ? 'Saving…' : 'Save Lyrics'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="lyrics-textarea-wrap">
+                    <textarea
+                      className="spotify-lyrics-textarea"
+                      value={editableLyrics}
+                      onChange={e => setEditableLyrics(e.target.value)}
+                      placeholder="Paste or type lyrics here...&#10;&#10;[Verse 1]&#10;Words go here...&#10;&#10;[Chorus]&#10;..."
+                      autoFocus
+                      spellCheck={false}
+                    />
+                  </div>
+                </div>
               ) : hasLyrics ? (
+                /* ── Static Lyrics Reader Mode ── */
                 <div className="spotify-lyrics-container static-reader">
                   {/* Lyrics Header Toolbar */}
                   <div className="lyrics-toolbar">
@@ -324,14 +524,26 @@ export default function ExpandedPlayer() {
                         <span className="lyrics-toolbar-artist">{currentTrack.artist}</span>
                       )}
                     </div>
-                    <button
-                      className={`lyrics-copy-btn ${copied ? 'copied' : ''}`}
-                      onClick={handleCopyLyrics}
-                      title="Copy full lyrics"
-                    >
-                      {copied ? <IconCheck /> : <IconCopy />}
-                      <span>{copied ? 'Copied!' : 'Copy'}</span>
-                    </button>
+
+                    <div className="lyrics-toolbar-right-btns">
+                      <button
+                        className="lyrics-edit-btn"
+                        onClick={startEditingLyrics}
+                        title="Edit lyrics for this song"
+                      >
+                        <IconEdit />
+                        <span>Edit Lyrics</span>
+                      </button>
+
+                      <button
+                        className={`lyrics-copy-btn ${copied ? 'copied' : ''}`}
+                        onClick={handleCopyLyrics}
+                        title="Copy full lyrics"
+                      >
+                        {copied ? <IconCheck /> : <IconCopy />}
+                        <span>{copied ? 'Copied!' : 'Copy'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Clean Static Lyrics Content */}
@@ -340,35 +552,51 @@ export default function ExpandedPlayer() {
                       {lyricsData.plainLyrics}
                     </div>
                     <div className="lyrics-attribution">
-                      <span>Lyrics provided by LRCLIB</span>
+                      <span>{lyricsData.isCustom ? 'Custom user lyrics' : 'Lyrics provided by LRCLIB'}</span>
                     </div>
                   </div>
                 </div>
               ) : lyricsData?.isInstrumental ? (
+                /* ── Instrumental State ── */
                 <div className="spotify-lyrics-state empty">
                   <div className="empty-lyrics-icon">🎵</div>
                   <h3>Instrumental Track</h3>
-                  <p>This track is marked as instrumental with no lyrics.</p>
-                  <button 
-                    className="btn btn-primary btn-sm" 
-                    style={{ marginTop: 16 }}
-                    onClick={() => setPlayerViewMode('art')}
-                  >
-                    Back to Cover Art
-                  </button>
+                  <p>This track is marked as instrumental.</p>
+                  <div className="lyrics-empty-actions">
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      onClick={startEditingLyrics}
+                    >
+                      ✏️ Add Custom Lyrics
+                    </button>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      onClick={() => setPlayerViewMode('art')}
+                    >
+                      Back to Cover Art
+                    </button>
+                  </div>
                 </div>
               ) : (
+                /* ── No Lyrics Found State ── */
                 <div className="spotify-lyrics-state empty">
                   <div className="empty-lyrics-icon">🎤</div>
                   <h3>No lyrics available</h3>
-                  <p>We couldn't find lyrics for "{currentTrack.title}".</p>
-                  <button 
-                    className="btn btn-primary btn-sm" 
-                    style={{ marginTop: 16 }}
-                    onClick={() => setPlayerViewMode('art')}
-                  >
-                    Back to Cover Art
-                  </button>
+                  <p>We couldn't find online lyrics for "{currentTrack.title}".</p>
+                  <div className="lyrics-empty-actions">
+                    <button 
+                      className="btn btn-primary btn-sm" 
+                      onClick={startEditingLyrics}
+                    >
+                      ➕ Add / Write Lyrics
+                    </button>
+                    <button 
+                      className="btn btn-secondary btn-sm" 
+                      onClick={() => setPlayerViewMode('art')}
+                    >
+                      Back to Cover Art
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
