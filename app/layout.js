@@ -30,13 +30,16 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         {children}
-        <script dangerouslySetInnerHTML={{ __html: `
+        {process.env.NODE_ENV === 'production' && <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-              navigator.serviceWorker.register('/sw.js').catch(() => {});
+              navigator.serviceWorker.register('/sw.js', {
+                scope: '/',
+                updateViaCache: 'none',
+              }).catch(error => console.error('Offline setup failed:', error));
             });
           }
-        `}} />
+        `}} />}
       </body>
     </html>
   );

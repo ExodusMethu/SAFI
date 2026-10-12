@@ -201,12 +201,16 @@ export function PlayerProvider({ children }) {
 
     async function loadAudio() {
       let url = null;
-      if (downloadedIds.has(currentTrack.id)) {
-        url = await getOfflineTrackBlobUrl(currentTrack.id);
+      // The ID list may still be loading when Play is pressed after launch.
+      try { url = await getOfflineTrackBlobUrl(currentTrack.id); } catch (err) {
+        console.warn('Could not read downloaded audio:', err);
       }
       if (!url) url = getAudioUrl(currentTrack);
 
-      if (!active) return;
+      if (!active) {
+        if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+        return;
+      }
       if (!url) return;
 
       audio.src = url;
@@ -244,7 +248,10 @@ export function PlayerProvider({ children }) {
         if (details.seekTime !== undefined) audio.currentTime = details.seekTime;
       });
     }
-    return () => { active = false; };
+    return () => {
+      active = false;
+      if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex, queue]);
 
