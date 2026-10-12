@@ -133,6 +133,14 @@ export function PlayerProvider({ children }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState('none'); // none | one | all
   const [downloadedIds, setDownloadedIds] = useState(new Set());
+  const [recentIds, setRecentIds] = useState([]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('safi_recent_tracks') || '[]');
+      if (Array.isArray(saved)) setRecentIds(saved.filter(id => typeof id === 'string').slice(0, 24));
+    } catch {}
+  }, []);
 
   // Spotify-style Expanded Player & Lyrics State
   const [isExpanded, setIsExpanded] = useState(false);
@@ -149,6 +157,16 @@ export function PlayerProvider({ children }) {
   }, []);
 
   const currentTrack = queue[currentIndex] ?? null;
+
+  function rememberTrack() {
+    setIsPlaying(true);
+    if (!currentTrack) return;
+    setRecentIds(previous => {
+      const next = [currentTrack.id, ...previous.filter(id => id !== currentTrack.id)].slice(0, 24);
+      try { localStorage.setItem('safi_recent_tracks', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
 
   // Build audio URL from R2
   function getAudioUrl(track) {
@@ -349,6 +367,7 @@ export function PlayerProvider({ children }) {
     if (success) {
       setDownloadedIds(prev => new Set([...prev, track.id]));
     }
+    return success;
   }
 
   async function handleRemoveDownload(trackId) {
@@ -403,7 +422,7 @@ export function PlayerProvider({ children }) {
       playTrack, playQueue, togglePlay,
       nextTrack, prevTrack, seekTo,
       getCoverUrl,
-      downloadedIds, handleDownloadTrack, handleRemoveDownload,
+      downloadedIds, recentIds, handleDownloadTrack, handleRemoveDownload,
       // Spotify player & lyrics states
       isExpanded, setIsExpanded, toggleExpanded, openLyrics, openPlayer,
       playerViewMode, setPlayerViewMode,
@@ -418,7 +437,7 @@ export function PlayerProvider({ children }) {
         onTimeUpdate={e => setProgress(e.target.currentTime)}
         onDurationChange={e => setDuration(e.target.duration)}
         onEnded={nextTrack}
-        onPlay={() => setIsPlaying(true)}
+        onPlay={rememberTrack}
         onPause={() => setIsPlaying(false)}
       />
       {children}

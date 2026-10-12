@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { usePlayer } from './Providers';
 import { supabase } from '@/lib/supabase';
+import Cover from './Cover';
 
 function formatTime(s) {
   if (!s || isNaN(s)) return '0:00';
@@ -336,11 +337,7 @@ export default function ExpandedPlayer() {
           {playerViewMode === 'art' && (
             <div className="spotify-art-view">
               <div className="spotify-art-container">
-                {coverUrl ? (
-                  <img src={coverUrl} alt={currentTrack.title} className="spotify-art-image" />
-                ) : (
-                  <div className="spotify-art-placeholder">🎵</div>
-                )}
+                <Cover src={coverUrl} title={currentTrack.album || currentTrack.title} className="spotify-art-image" />
               </div>
 
               {/* Track Title and Artist Info */}

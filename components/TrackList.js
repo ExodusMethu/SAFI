@@ -1,81 +1,23 @@
 'use client';
-
 import { usePlayer } from './Providers';
-
-function formatDuration(sec) {
-  if (!sec || isNaN(sec)) return '--:--';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60).toString().padStart(2, '0');
-  return `${m}:${s}`;
-}
+import { formatTime } from '@/lib/library.mjs';
+import Cover from './Cover';
+import Icon from './Icon';
 
 export default function TrackList({ tracks, onContextMenu }) {
-  const { playTrack, currentTrack, isPlaying, getCoverUrl, downloadedIds } = usePlayer();
-
-  return (
-    <div className="track-list">
-      {tracks.map((track, i) => {
-        const isActive = currentTrack?.id === track.id;
-        const coverUrl = getCoverUrl(track);
-
-        return (
-          <div
-            key={track.id}
-            className={`track-list-item ${isActive ? 'playing' : ''}`}
-            onClick={() => playTrack(track, tracks)}
-            onContextMenu={e => { e.preventDefault(); onContextMenu?.(e, track); }}
-          >
-            <div className="track-list-num">
-              {isActive && isPlaying ? (
-                <div style={{ display: 'flex', gap: '2px', alignItems: 'flex-end', height: '14px', justifyContent: 'flex-end' }}>
-                  <div className="playing-bar" style={{ animationDelay: '0s', background: 'var(--accent-bright)' }} />
-                  <div className="playing-bar" style={{ animationDelay: '0.2s', background: 'var(--accent-bright)' }} />
-                  <div className="playing-bar" style={{ animationDelay: '0.4s', background: 'var(--accent-bright)' }} />
-                </div>
-              ) : (
-                i + 1
-              )}
-            </div>
-
-            <div className="track-list-info" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {downloadedIds?.has(track.id) && (
-                <span style={{ color: 'var(--green)', fontSize: '14px', flexShrink: 0 }}>✅</span>
-              )}
-              {coverUrl ? (
-                <img src={coverUrl} alt={track.title} className="track-list-thumb" loading="lazy" />
-              ) : (
-                <div className="track-list-thumb-placeholder">🎵</div>
-              )}
-              <div className="track-list-meta">
-                <div className="track-list-name">
-                  {track.title}
-                </div>
-                <div className="track-list-artist">{track.artist ?? 'Unknown Artist'}</div>
-              </div>
-            </div>
-
-            <div className="track-list-album">
-              {track.album ?? ''}
-            </div>
-
-            <div className="track-list-duration" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
-              <span>{formatDuration(0)}</span>
-              {onContextMenu && (
-                <button
-                  className="icon-btn"
-                  onClick={e => { e.stopPropagation(); onContextMenu(e, track); }}
-                  title="More options"
-                  style={{ background: 'transparent' }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const { playTrack, togglePlay, currentTrack, isPlaying, getCoverUrl, downloadedIds } = usePlayer();
+  return <div className="song-list">
+    <div className="song-list-header"><span>#</span><span>Title</span><span>Album</span><span>Time</span></div>
+    {tracks.map((track, i) => {
+      const active = currentTrack?.id === track.id;
+      return <div key={track.id} className={`song-row ${active ? 'is-playing' : ''}`} onContextMenu={e => { e.preventDefault(); onContextMenu?.(e, track); }}>
+        <button className="song-number" aria-label={active && isPlaying ? `Pause ${track.title}` : `Play ${track.title}`} onClick={() => active ? togglePlay() : playTrack(track, tracks)}><span>{active && isPlaying ? <Icon name="pause" size={16} /> : i + 1}</span><Icon className="row-play-icon" name={active && isPlaying ? 'pause' : 'play'} size={16} /></button>
+        <button className="song-main" onClick={() => active ? togglePlay() : playTrack(track, tracks)} aria-label={`Play ${track.title} by ${track.artist || 'Unknown artist'}`}>
+          <Cover src={getCoverUrl(track)} title={track.album || track.title} /><div><strong>{track.title}</strong><span>{downloadedIds.has(track.id) && <Icon name="download" size={12} />}{track.artist || 'Unknown artist'}</span></div>
+        </button>
+        <span className="song-album">{track.album || '—'}</span>
+        <div className="song-actions"><span>{formatTime(track.duration)}</span>{onContextMenu && <button className="icon-btn" aria-label={`Options for ${track.title}`} onClick={e => onContextMenu(e, track)}><Icon name="more" size={19} /></button>}</div>
+      </div>;
+    })}
+  </div>;
 }

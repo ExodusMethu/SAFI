@@ -1,4 +1,5 @@
 import './globals.css';
+import './music.css';
 
 export const metadata = {
   title: 'SAFI — Your Personal Music',

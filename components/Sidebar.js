@@ -1,128 +1,20 @@
 'use client';
+import { useAuth, usePlayer } from './Providers';
+import Icon from './Icon';
+import Cover from './Cover';
+import { playlistTracks } from '@/lib/library.mjs';
 
-import { useState } from 'react';
-import { useAuth } from './Providers';
-
-export default function Sidebar({ view, setView, playlists, onCreatePlaylist, onSelectPlaylist, selectedPlaylist }) {
+export default function Sidebar({ view, setView, playlists, onSelectPlaylist, selectedPlaylist }) {
   const { user, signOut, openAuthModal } = useAuth();
-  const [showNewPlaylist, setShowNewPlaylist] = useState(false);
-  const [newName, setNewName] = useState('');
-
-  async function handleCreate() {
-    if (!newName.trim()) return;
-    if (!user || user.isOffline) {
-      openAuthModal();
-      return;
-    }
-    await onCreatePlaylist(newName.trim());
-    setNewName('');
-    setShowNewPlaylist(false);
-  }
-
-  const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??';
-
-  return (
-    <aside className="sidebar">
-      {/* Logo */}
-      <div className="logo">
-        <div className="logo-icon">🎵</div>
-        <span className="logo-text">SAFI</span>
-      </div>
-
-      {/* Main nav */}
-      <nav className="nav-section">
-        <div className="nav-section-label">Menu</div>
-        <button className={`nav-item ${view === 'home' ? 'active' : ''}`} onClick={() => setView('home')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-          </svg>
-          Home
-        </button>
-        <button className={`nav-item ${view === 'library' ? 'active' : ''}`} onClick={() => setView('library')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-          </svg>
-          My Library
-        </button>
-        <button className={`nav-item ${view === 'upload' ? 'active' : ''}`} onClick={() => setView('upload')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
-          </svg>
-          Upload
-        </button>
-      </nav>
-
-      {/* Playlists */}
-      <div className="nav-section">
-        <div className="nav-section-label" style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          Playlists
-          <button
-            onClick={() => {
-              if (!user || user.isOffline) {
-                openAuthModal();
-                return;
-              }
-              setShowNewPlaylist(s => !s);
-            }}
-            style={{ color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer', fontSize:'1.1rem', lineHeight:1 }}
-            title="New playlist"
-          >+</button>
-        </div>
-        {showNewPlaylist && (
-          <div style={{ display:'flex', gap:6, marginBottom:8 }}>
-            <input
-              className="field-input"
-              placeholder="Playlist name"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleCreate()}
-              autoFocus
-            />
-            <button className="btn btn-primary btn-sm" onClick={handleCreate}>Add</button>
-          </div>
-        )}
-      </div>
-
-      <div className="sidebar-playlists">
-        {playlists.map(pl => (
-          <button
-            key={pl.id}
-            className={`playlist-item ${selectedPlaylist?.id === pl.id && view === 'playlist' ? 'active' : ''}`}
-            onClick={() => { onSelectPlaylist(pl); setView('playlist'); }}
-          >
-            <div className="playlist-thumb-placeholder">🎶</div>
-            <span className="playlist-item-name">{pl.name}</span>
-          </button>
-        ))}
-        {playlists.length === 0 && (
-          <div style={{ fontSize:'0.75rem', color:'var(--text-muted)', padding:'8px' }}>
-            No playlists yet
-          </div>
-        )}
-      </div>
-
-      {/* User area */}
-      <div className="user-area">
-        {user && !user.isOffline ? (
-          <>
-            <div className="user-avatar">{initials}</div>
-            <div className="user-info-text" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-              <span className="user-email" title={user.email}>{user.email}</span>
-              <button className="logout-btn" onClick={signOut}>Sign out</button>
-            </div>
-          </>
-        ) : (
-          <div className="user-guest-block">
-            <div className="user-guest-info">
-              <div className="user-avatar guest-avatar">👤</div>
-              <span className="user-email">{user?.isOffline ? 'Offline Mode' : 'Not signed in'}</span>
-            </div>
-            <button className="btn btn-primary btn-sm user-signin-btn" onClick={openAuthModal}>
-              Sign In
-            </button>
-          </div>
-        )}
-      </div>
-    </aside>
-  );
+  const { getCoverUrl } = usePlayer();
+  return <aside className="sidebar">
+    <button className="brand" aria-label="SAFI home" onClick={() => setView('home')}><span className="brand-mark"><i /><i /><i /><i /></span>SAFI<span className="brand-caption">MUSIC</span></button>
+    <nav className="sidebar-navigation" aria-label="Main navigation">
+      {[['home', 'home', 'Home'], ['library', 'library', 'Your library'], ['playlists', 'music', 'Playlists']].map(([id, icon, label]) => <button key={id} className={`nav-item ${view === id || (id === 'playlists' && view === 'playlist') ? 'active' : ''}`} onClick={() => setView(id)}><Icon name={icon} />{label}</button>)}
+    </nav>
+    <div className="sidebar-section-label"><span>YOUR PLAYLISTS</span><button className="icon-btn" aria-label="Manage playlists" onClick={() => setView('playlists')}><Icon name="plus" size={18} /></button></div>
+    <div className="sidebar-playlists">{playlists.map(pl => <button key={pl.id} className={`playlist-item ${view === 'playlist' && selectedPlaylist?.id === pl.id ? 'active' : ''}`} onClick={() => { onSelectPlaylist(pl); setView('playlist'); }}><Cover src={getCoverUrl(playlistTracks(pl).find(t => t.cover_key))} title={pl.name} /><div><strong>{pl.name}</strong><span>{pl.playlist_tracks?.length || 0} songs</span></div></button>)}{!playlists.length && <p className="sidebar-hint">Your playlists live here.<br />Make one for any mood.</p>}</div>
+    <button className={`sidebar-upload nav-item ${view === 'upload' ? 'active' : ''}`} onClick={() => setView('upload')}><Icon name="upload" />Add music</button>
+    <div className="user-area"><div className="user-avatar">{user?.email?.slice(0, 1).toUpperCase() || 'S'}</div><div className="user-account"><span className="user-email">{user?.isOffline ? 'Offline listening' : user?.email || 'Your personal collection'}</span><button className="logout-btn" onClick={user && !user.isOffline ? signOut : openAuthModal}>{user && !user.isOffline ? 'Sign out' : 'Sign in'}</button></div></div>
+  </aside>;
 }

@@ -5,17 +5,25 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 // GET /api/tracks - list all tracks
-export async function GET() {
+export async function GET(request) {
   const supabase = createServerSupabase();
+  const offset = Number(new URL(request.url).searchParams.get('offset') || 0);
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    return NextResponse.json({ error: 'Invalid offset' }, { status: 400 });
+  }
+  const pageSize = 200;
   const { data, error } = await supabase
     .from('tracks')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + pageSize - 1);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, {
     headers: {
       'Cache-Control': 'no-store, max-age=0',
+      'X-Has-More': String(data.length === pageSize),
     },
   });
 }

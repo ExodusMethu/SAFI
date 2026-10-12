@@ -1,6 +1,7 @@
 'use client';
 
 import { usePlayer } from './Providers';
+import Cover from './Cover';
 
 function formatTime(s) {
   if (!s || isNaN(s)) return '0:00';
@@ -102,9 +103,9 @@ export default function Player() {
 
   if (!currentTrack) {
     return (
-      <div className="player-bar" style={{ justifyContent: 'center', opacity: 0.3 }}>
-        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          🎵 Select a track to start playing
+      <div className="player-bar player-empty" style={{ display: 'flex', justifyContent: 'center' }}>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+          Choose a song to start listening
         </span>
       </div>
     );
@@ -117,21 +118,17 @@ export default function Player() {
   return (
     <div className="player-bar">
       {/* Track info - click to open Spotify full player */}
-      <div 
+      <button
         className="player-track-info clickable" 
         onClick={() => openPlayer('art')}
         title="Open full player"
       >
-        {coverUrl ? (
-          <img src={coverUrl} alt={currentTrack.title} className="player-art" />
-        ) : (
-          <div className="player-art-placeholder">🎵</div>
-        )}
+        <Cover src={coverUrl} title={currentTrack.album || currentTrack.title} className="player-art" />
         <div className="player-meta">
           <div className="player-title">{currentTrack.title}</div>
           <div className="player-artist">{currentTrack.artist ?? 'Unknown Artist'}</div>
         </div>
-      </div>
+      </button>
 
       {/* Controls */}
       <div className="player-controls">
@@ -169,6 +166,7 @@ export default function Player() {
           <span className="time-label">{formatTime(progress)}</span>
           <input
             type="range"
+            aria-label="Playback position"
             className="seek-bar"
             min={0}
             max={duration || 0}
@@ -200,6 +198,7 @@ export default function Player() {
           </button>
           <input
             type="range"
+            aria-label="Volume"
             className="volume-bar"
             min={0}
             max={1}
