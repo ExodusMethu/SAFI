@@ -5,6 +5,7 @@ import { usePlayer } from './Providers';
 import TrackList from './TrackList';
 import TrackCard from './TrackCard';
 import UploadForm from './UploadForm';
+import PlaylistImport from './PlaylistImport';
 import Cover from './Cover';
 import Icon from './Icon';
 import { groupAlbums, playlistTracks, selectTracks } from '@/lib/library.mjs';
@@ -97,7 +98,7 @@ export default function MusicViews({ view, setView, tracks, playlists, selectedP
       </>;
     })()}
 
-    {view === 'upload' && <><div className="page-heading"><div><p className="eyebrow">GROW YOUR COLLECTION</p><h1>Add your music</h1><p className="page-subtitle">Your favourite files, ready to play anywhere.</p></div></div><UploadForm playlists={playlists} existingTracks={tracks} onUploaded={onUploaded} /></>}
+    {view === 'upload' && <><div className="page-heading"><div><p className="eyebrow">GROW YOUR COLLECTION</p><h1>Add your music</h1><p className="page-subtitle">Your favourite files, ready to play anywhere.</p></div></div><PlaylistImport onUploaded={onUploaded} /><UploadForm playlists={playlists} existingTracks={tracks} onUploaded={onUploaded} /></>}
     {creating && <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setCreating(false); }}><form className="modal-card create-playlist-modal" role="dialog" aria-modal="true" aria-labelledby="new-playlist-title" onSubmit={createPlaylist} onKeyDown={e => { if (e.key === 'Escape') setCreating(false); }}><div className="modal-header"><h2 id="new-playlist-title">New playlist</h2><button type="button" className="icon-btn" aria-label="Close" onClick={() => setCreating(false)}><Icon name="close" /></button></div><div className="modal-form"><label htmlFor="playlist-name">Give it a name</label><input id="playlist-name" className="modal-input" autoFocus maxLength={100} required value={newName} onChange={e => setNewName(e.target.value)} placeholder="Late night listening" />{createError && <p role="alert">{createError}</p>}<button className="btn btn-primary" disabled={busy || !newName.trim()}>{busy ? 'Creating…' : 'Create playlist'}</button></div></form></div>}
   </>;
 }

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MP3DL — Spotify & YouTube Music Playlist Downloader</title>
+
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Ambient Glow Background -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <div class="app-container">
+
+    <!-- App Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fa-solid fa-compact-disc fa-spin-slow"></i>
+        </div>
+        <div class="brand-text">
+          <h1>MP3DL <span class="badge">PRO</span></h1>
+          <p>Spotify & YouTube Music Downloader</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="open-folder-btn" class="btn btn-secondary" title="Open Downloads Folder">
+          <i class="fa-regular fa-folder-open"></i> Downloads Folder
+        </button>
+      </div>
+    </header>
+
+    <!-- Hero Search / URL Input Box -->
+    <section class="hero-section">
+      <div class="search-card glass-panel">
+        <label for="url-input" class="search-label">
+          <i class="fa-solid fa-link"></i> Enter Spotify / YouTube Playlist URL or Song Query
+        </label>
+        
+        <div class="search-input-group">
+          <div class="input-wrapper">
+            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+            <input 
+              type="text" 
+              id="url-input" 
+              placeholder="e.g. https://open.spotify.com/playlist/... or Bohemian Rhapsody Queen"
+              autocomplete="off"
+            >
+            <button id="clear-btn" class="btn-icon" title="Clear input" style="display: none;">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <select id="global-audio-format" class="btn btn-secondary" style="appearance: auto; padding-right: 15px; font-family: 'Inter', sans-serif;">
+            <option value="mp3">MP3</option>
+            <option value="wav">WAV</option>
+          </select>
+
+          <button id="paste-btn" class="btn btn-secondary" title="Paste from clipboard">
+            <i class="fa-regular fa-paste"></i> Paste
+          </button>
+          
+          <button id="fetch-btn" class="btn btn-primary">
+            <span class="btn-text"><i class="fa-solid fa-bolt"></i> Fetch Tracks</span>
+            <span class="spinner" style="display: none;"><i class="fa-solid fa-circle-notch fa-spin"></i></span>
+          </button>
+        </div>
+
+        <div class="supported-badges">
+          <span><i class="fa-brands fa-spotify spotify-color"></i> Spotify Playlists & Albums</span>
+          <span><i class="fa-brands fa-youtube youtube-color"></i> YouTube Music Playlists</span>
+          <span><i class="fa-solid fa-music"></i> Single Song Search</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Error / Status Alert Banner -->
+    <div id="alert-box" class="alert-box" style="display: none;">
+      <i class="fa-solid fa-circle-exclamation alert-icon"></i>
+      <span id="alert-message">Error message</span>
+      <button class="alert-close" onclick="hideAlert()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+
+    <!-- Main Content Container (Playlist / Search Results) -->
+    <main id="main-content" class="main-content">
+      
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state glass-panel">
+        <div class="empty-icon">
+          <i class="fa-solid fa-music"></i>
+        </div>
+        <h3>Ready to Grab Your Music</h3>
+        <p>Paste a playlist URL above from Spotify or YouTube Music to extract song lists & batch download audio.</p>
+        
+        <div class="quick-samples">
+          <span>Try an example:</span>
+          <button class="chip" onclick="loadSample('https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M')">
+            <i class="fa-brands fa-spotify"></i> Spotify Top Hits
+          </button>
+          <button class="chip" onclick="loadSample('https://www.youtube.com/playlist?list=PL4fGSI1pDJn6O1LS0XSdF3RyO0Rq_LDeI')">
+            <i class="fa-brands fa-youtube"></i> US Top 100 YouTube
+          </button>
+        </div>
+      </div>
+
+      <!-- Playlist View Section -->
+      <section id="playlist-view" class="playlist-view glass-panel" style="display: none;">
+        
+        <div class="playlist-header">
+          <div class="playlist-info">
+            <div class="playlist-cover">
+              <i id="playlist-source-icon" class="fa-brands fa-spotify"></i>
+            </div>
+            <div>
+              <span id="playlist-source-badge" class="source-badge">Spotify</span>
+              <h2 id="playlist-title">Playlist Title</h2>
+              <p id="playlist-meta"><span id="track-count">0</span> tracks extracted</p>
+            </div>
+          </div>
+
+          <div class="playlist-header-actions">
+            <button id="export-txt-btn" class="btn btn-outline" title="Export track list to text file">
+              <i class="fa-regular fa-file-lines"></i> Export .TXT
+            </button>
+            <button id="export-json-btn" class="btn btn-outline" title="Export JSON format">
+              <i class="fa-solid fa-code"></i> Export JSON
+            </button>
+            <button id="download-selected-btn" class="btn btn-success btn-large">
+              <i class="fa-solid fa-download"></i> Download Selected (<span id="selected-count">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Track List Toolbar -->
+        <div class="track-toolbar">
+          <div class="select-controls">
+            <label class="custom-checkbox">
+              <input type="checkbox" id="select-all-checkbox" checked>
+              <span class="checkmark"></span>
+              <span class="label-text">Select All</span>
+            </label>
+          </div>
+
+          <div class="filter-wrapper">
+            <i class="fa-solid fa-filter"></i>
+            <input type="text" id="track-filter-input" placeholder="Filter extracted songs...">
+          </div>
+        </div>
+
+        <!-- Scrollable Tracks Table / List -->
+        <div class="track-list-wrapper">
+          <table class="track-table">
+            <thead>
+              <tr>
+                <th width="40"></th>
+                <th width="50">#</th>
+                <th>Title</th>
+                <th>Artist</th>
+                <th width="100" class="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="track-list-body">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Single Search Results View -->
+      <section id="search-view" class="search-view glass-panel" style="display: none;">
+        <h3 class="section-title"><i class="fa-solid fa-list-ul"></i> Search Results</h3>
+        <div id="search-results-list" class="search-results-list">
+          <!-- Dynamically populated search cards -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Download Progress Drawer / Modal Panel -->
+    <div id="download-progress-panel" class="download-panel glass-panel" style="display: none;">
+      <div class="download-panel-header">
+        <div class="download-status-info">
+          <span class="status-indicator-dot pulse"></span>
+          <div>
+            <h4 id="progress-title">Downloading Songs...</h4>
+            <p id="progress-subtitle">Track 0 of 0</p>
+          </div>
+        </div>
+
+        <button id="close-progress-btn" class="btn-icon" onclick="toggleProgressLogs()">
+          <i class="fa-solid fa-chevron-down"></i>
+        </button>
+      </div>
+
+      <div class="progress-bar-container">
+        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+
+      <div class="progress-stats">
+        <span>Completed: <strong id="stat-completed" class="stat-green">0</strong></span>
+        <span>Failed: <strong id="stat-failed" class="stat-red">0</strong></span>
+        <span>Output: <span id="stat-folder">~/Music/Downloads</span></span>
+      </div>
+
+      <!-- Realtime Console Log Output -->
+      <div id="console-log-box" class="console-log-box">
+        <div id="log-content">Initializing download task...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

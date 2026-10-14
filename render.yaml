@@ -1,0 +1,26 @@
+# Free cloud worker. No paid instance or persistent disk is provisioned.
+services:
+  - type: web
+    name: safi-music-import
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./services/music-import/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: "off"
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: IMPORT_JOB_STORE
+        value: supabase
+      - key: IMPORT_MAX_TRACKS
+        value: "50"
+      - key: MUSIC_IMPORT_WORKER_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: IMPORT_UPLOAD_API_URL
+        sync: false

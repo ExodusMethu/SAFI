@@ -122,3 +122,17 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .mobile-nav { background: #111; border: 0; padding-top: 8px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }.mobile-nav-item { color: #888; font-size: 10px; gap: 5px; padding: 4px 10px; }.mobile-nav-item.active { color: #f3f3ec; }.mobile-nav-item svg { width: 21px; height: 21px; }.modal-backdrop { padding: 16px; }.modal-card { max-height: calc(100dvh - 32px); overflow-y: auto; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+.playlist-import { margin-bottom: 28px; padding: 24px; border: 1px solid var(--border, #333); border-radius: 16px; }
+.playlist-import h2 { margin: 0 0 12px; }
+.playlist-import .page-subtitle { margin-bottom: 20px; }
+.playlist-import-input { display: flex; gap: 12px; align-items: center; }
+.playlist-import-input .form-input { flex: 1; min-width: 0; }
+.playlist-import-progress { margin-top: 20px; overflow-wrap: anywhere; }
+.playlist-import-progress p { margin: 10px 0; }
+.playlist-import-progress progress { width: 100%; accent-color: var(--accent, #c8f36a); }
+.playlist-import-error { color: #f87171; }
+@media (max-width: 600px) {
+  .playlist-import { padding: 18px; }
+  .playlist-import-input { flex-direction: column; align-items: stretch; }
+}

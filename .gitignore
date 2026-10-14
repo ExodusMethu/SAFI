@@ -1,6 +1,11 @@
 .env.local
+.env.deploy.local
 .env
 node_modules/
 .next/
 public/offline-assets.js
 .qa/
+services/music-import/data/
+__pycache__/
+.venv/
+mp3dl-main/**/ffmpeg_bin/

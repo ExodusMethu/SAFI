@@ -1,0 +1,12 @@
+.git
+.env
+.env.local
+.env.*
+**/.env
+**/.env.*
+**/.venv
+**/__pycache__
+node_modules
+.next
+.qa
+services/music-import/data

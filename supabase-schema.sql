@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   cover_key   TEXT,             -- R2 key for album art
   lyrics      TEXT,             -- Custom / cached plain lyrics
   file_size   BIGINT,           -- bytes
+  source_url  TEXT,             -- canonical source link for imported-track deduplication
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -41,6 +42,9 @@ CREATE TABLE IF NOT EXISTS playlist_tracks (
 CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist ON playlist_tracks(playlist_id);
 CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id);
 CREATE INDEX IF NOT EXISTS idx_tracks_created ON tracks(created_at DESC);
+-- Also applies when running this schema against an existing database.
+ALTER TABLE tracks ADD COLUMN IF NOT EXISTS source_url TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_source_url ON tracks(source_url) WHERE source_url IS NOT NULL;
 
 -- Row Level Security: tracks are public read (shared library)
 ALTER TABLE tracks ENABLE ROW LEVEL SECURITY;
