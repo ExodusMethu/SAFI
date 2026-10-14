@@ -128,6 +128,23 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(writes[0]['track_id'], 'existing')
         self.assertEqual(saved['errors'][0]['title'], 'Unavailable')
 
+    def test_manual_upload_duplicates_reused_without_download(self):
+        job = self.create()
+        entry = {'title': '  MY Song ', 'artist': 'ARTIST', 'url': VIDEO}
+
+        def rest(table, method='GET', params=None, body=None):
+            if table == 'tracks':
+                return [{'id': 'manual', 'title': 'My Song', 'artist': 'Artist'}] if params.get('offset') else []
+            return [{'id': 'playlist'}] if table == 'playlists' else [body]
+
+        with patch.object(worker, 'bridge', return_value={'title': 'Test', 'tracks': [entry, entry]}) as bridge, \
+                patch.object(worker, 'rest', side_effect=rest), patch.object(worker.boto3, 'client') as storage:
+            worker.run(job)
+        bridge.assert_called_once()
+        storage.return_value.upload_file.assert_not_called()
+        self.assertEqual(worker.latest(USER)['reused'], 2)
+        self.assertEqual(worker.latest(USER)['failed'], 0)
+
     def test_upload_metadata_and_cleanup_after_database_failure(self):
         for fail_insert in (False, True):
             with self.subTest(fail_insert=fail_insert):

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
@@ -52,6 +53,29 @@ def canonical_video(value):
             not re.fullmatch(r'[A-Za-z0-9_-]{11}', video)):
         raise ValueError('This playlist entry has no valid YouTube video link.')
     return 'https://www.youtube.com/watch?v=' + video
+
+
+def song_identity(title, artist):
+    # Match tagged manual uploads conservatively; do not guess from title alone.
+    def clean(value):
+        return ' '.join(unicodedata.normalize('NFKC', value or '').casefold().split())
+    title, artist = clean(title), clean(artist)
+    return (title, artist) if title and artist else None
+
+
+def existing_songs():
+    result = {}
+    offset = 0
+    while True:
+        rows = rest('tracks', params={'select': 'id,title,artist', 'order': 'created_at.asc,id.asc',
+                                     'offset': str(offset), 'limit': '500'})
+        for row in rows:
+            identity = song_identity(row.get('title'), row.get('artist'))
+            if identity:
+                result.setdefault(identity, row['id'])
+        if len(rows) < 500:
+            return result
+        offset += len(rows)
 
 
 @contextmanager
@@ -282,6 +306,7 @@ def run(job):
             raise ValueError(f'This playlist exceeds the {MAX_TRACKS}-track import limit. Split it into smaller playlists.')
         # Fail before creating a playlist if the source_url migration is missing.
         rest('tracks', params={'select': 'id,source_url', 'limit': '1'})
+        songs = existing_songs()
         personal = rest('playlists', 'POST', body={
             'user_id': job['user_id'], 'name': playlist['title'],
             'description': 'Imported from ' + job['url'],
@@ -297,8 +322,11 @@ def run(job):
             job['current_track'] = entry['title']
             save(job)
             try:
-                source = canonical_video(entry.get('url'))
-                existing = rest('tracks', params={'source_url': 'eq.' + source, 'select': 'id', 'limit': '1'})
+                identity = song_identity(entry.get('title'), entry.get('artist'))
+                existing = [{'id': songs[identity]}] if identity in songs else []
+                source = canonical_video(entry.get('url')) if not existing else None
+                if not existing:
+                    existing = rest('tracks', params={'source_url': 'eq.' + source, 'select': 'id', 'limit': '1'})
                 if existing:
                     track_id = existing[0]['id']
                     reused = True
@@ -325,6 +353,8 @@ def run(job):
                             raise
                         track_id = track['id']
                         reused = False
+                if identity:
+                    songs[identity] = track_id
                 if track_id not in linked:
                     rest('playlist_tracks', 'POST', body={'playlist_id': personal['id'], 'track_id': track_id, 'position': position})
                     linked.add(track_id)

@@ -65,7 +65,7 @@ YouTube can reject downloads from cloud IPs. A real playlist test after deployme
 
 One active import per user, at most ten queued/running imports, processed serially. The free Blueprint allows 50 playlist entries per import. Each track is limited to 30 minutes, 100 MB, and ten minutes of downloading.
 
-Exact source URLs deduplicate repeated imports. Manual uploads have no source URL and cannot be deduplicated by this method. Each import creates a new personal playlist. Failed entries are listed separately; successful tracks remain available. Playback and offline downloads use SAFI's existing features; artwork uses fallback covers.
+Exact source URLs deduplicate repeated imports. Matching title and artist metadata, ignoring case and extra whitespace, also reuses manual uploads. Entries without artist metadata are not matched by title alone. Existing library tracks are kept; duplicates are skipped during import. Each import creates a new personal playlist. Failed entries are listed separately; successful tracks remain available. Playback and offline downloads use SAFI's existing features; artwork uses fallback covers.
 
 The worker calls `mp3dl-main/mp3dl-main/mp3dl.py` and `playlist_fetcher.py`. The legacy MP3DL web server is not needed.
 
