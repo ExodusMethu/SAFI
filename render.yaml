@@ -15,7 +15,7 @@ services:
       - key: IMPORT_JOB_STORE
         value: supabase
       - key: IMPORT_MAX_TRACKS
-        value: "50"
+        value: "100"
       - key: MUSIC_IMPORT_WORKER_SECRET
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_URL

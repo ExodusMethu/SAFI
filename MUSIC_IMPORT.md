@@ -6,7 +6,7 @@ In **Add music**, paste a public or unlisted YouTube Music playlist link and sel
 
 ## Prepared in this repository
 
-- `render.yaml`: Free Docker web service in Frankfurt, 50 tracks per import, no paid disk, manual deployments.
+- `render.yaml`: Free Docker web service, 100 tracks per import, no paid disk, manual deployments.
 - `services/music-import/Dockerfile`: Python, FFmpeg, and Node; one worker process.
 - `migrations/20261014_music_import.sql`: Source-link deduplication.
 - `migrations/20261014_music_import_jobs.sql`: Persistent progress in Supabase.
@@ -30,7 +30,7 @@ Cloud access is required before these live steps can be completed. Connect Supab
 
 Set `MUSIC_IMPORT_WORKER_SECRET`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `IMPORT_UPLOAD_API_URL=https://<your-safi-domain>/api/music-import-upload`. The deployed worker gets temporary R2 upload URLs from SAFI, so the existing R2 credentials remain only in Vercel. Direct R2 credentials on the worker remain an optional alternative for local/self-hosted use.
 
-The Blueprint sets `IMPORT_JOB_STORE=supabase`, `IMPORT_MAX_TRACKS=50`, and `PORT=8000`. Run one instance and one process.
+The Blueprint sets `IMPORT_JOB_STORE=supabase`, `IMPORT_MAX_TRACKS=100`, and `PORT=8000`. Run one instance and one process.
 
 A shared secret has been prepared locally in the ignored `.qa/cloud-setup/worker-secret.env`. Its value is not committed or printed in chat. Use the same value on Render and Vercel.
 
@@ -63,7 +63,7 @@ YouTube can reject downloads from cloud IPs. A real playlist test after deployme
 
 ## Import behavior
 
-One active import per user, at most ten queued/running imports, processed serially. The free Blueprint allows 50 playlist entries per import. Each track is limited to 30 minutes, 100 MB, and ten minutes of downloading.
+One active import per user, at most ten queued/running imports, processed serially. The free Blueprint allows 100 playlist entries per import. Each track is limited to 30 minutes, 100 MB, and ten minutes of downloading.
 
 Exact source URLs deduplicate repeated imports. Matching title and artist metadata, ignoring case and extra whitespace, also reuses manual uploads. Entries without artist metadata are not matched by title alone. Existing library tracks are kept; duplicates are skipped during import. Each import creates a new personal playlist. Failed entries are listed separately; successful tracks remain available. Playback and offline downloads use SAFI's existing features; artwork uses fallback covers.
 
