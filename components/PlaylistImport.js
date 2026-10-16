@@ -72,7 +72,7 @@ export default function PlaylistImport({ onUploaded }) {
   return (
     <section className="playlist-import">
       <h2>Import a YouTube Music playlist</h2>
-      <p className="page-subtitle">Paste a public or unlisted playlist link. Imported songs join the shared library and a playlist in your account.</p>
+      <p className="page-subtitle">Paste a public or unlisted playlist link. Imported songs join the shared library and a playlist in your account. With PC imports, open Start SAFI Importer on your PC when you are ready.</p>
       <form onSubmit={start}>
         <label className="form-label" htmlFor="music-playlist-url">Playlist link</label>
         <div className="playlist-import-input">
@@ -87,14 +87,14 @@ export default function PlaylistImport({ onUploaded }) {
       {error && <p role="alert" className="playlist-import-error">{error}</p>}
       {job && <div className="playlist-import-progress" role="status" aria-live="polite">
         <strong>{job.title || 'Playlist import'}</strong>
-        <p>{active ? (job.current_track || 'Reading playlist…') : job.status === 'complete' ? 'Import finished' : 'Import stopped'}</p>
+        <p>{job.status === 'queued' ? 'Waiting to start. For PC imports, open Start SAFI Importer on your PC.' : active ? (job.current_track || 'Reading playlist…') : job.status === 'complete' ? 'Import finished' : 'Import stopped'}</p>
         {job.total > 0 && <><progress value={processed} max={job.total} aria-label="Playlist import progress" />
           <p>{processed} / {job.total} processed · {job.completed} added · {job.reused} already in library · {job.failed} failed</p></>}
         {job.error && <p className="playlist-import-error">{job.error}</p>}
         {job.errors?.length > 0 && <details><summary>Tracks that could not be imported</summary>
           <ul>{job.errors.map((item, index) => <li key={index}>{item.title}: {item.error}</li>)}</ul>
         </details>}
-        {active && <p>Keep this screen open until the import finishes. A free cloud worker may sleep or restart; saved songs are kept.</p>}
+        {active && <p>For PC imports, keep the importer window open until finished; you can leave this screen. For cloud imports, keep this screen open. Saved songs stay available after the importer is switched off.</p>}
       </div>}
     </section>
   );

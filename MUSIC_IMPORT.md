@@ -1,8 +1,15 @@
 ﻿# YouTube Music playlist imports
 
-SAFI runs on Vercel. The downloader runs on a separate **free Render web service**, so your PC can be switched off. R2 stores the MP3s; your existing Supabase project stores track metadata, playlists, and import progress.
+SAFI runs on Vercel. For on-demand PC imports, follow [PC_IMPORT.md](PC_IMPORT.md). In optional cloud mode, the downloader runs on a separate **free Render web service**, so your PC can be switched off. R2 stores the MP3s; your existing Supabase project stores track metadata, playlists, and import progress.
 
 In **Add music**, paste a public or unlisted YouTube Music playlist link and select **Import playlist**. The worker downloads each entry's exact video, converts it to MP3, and creates a playlist owned by the signed-in user. Tracks join SAFI's shared library. Private playlists and Google account linking are not included.
+
+## On-demand PC imports (no worker hosting)
+
+See [PC_IMPORT.md](PC_IMPORT.md) to launch imports only when you want them and
+switch the importer off completely afterward. Set `MUSIC_IMPORT_MODE=local`.
+The hosted-worker instructions below are optional; for those, explicitly set
+`MUSIC_IMPORT_MODE=cloud`.
 
 ## Prepared in this repository
 
@@ -71,7 +78,7 @@ The worker calls `mp3dl-main/mp3dl-main/mp3dl.py` and `playlist_fetcher.py`. The
 
 ## Optional local testing
 
-Install Python 3.12+, FFmpeg/ffprobe, and Node 20+ on PATH. Load the worker variables from `services/music-import/.env.example` into the shell, then:
+Install Python 3.12+, FFmpeg/ffprobe, and Node 22+ on PATH. Load the worker variables from `services/music-import/.env.example` into the shell, then:
 
 ```powershell
 python -m venv .venv

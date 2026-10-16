@@ -13,6 +13,7 @@ import tempfile
 import threading
 import unicodedata
 import uuid
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from urllib.parse import parse_qs, urlencode, urlparse
@@ -31,6 +32,17 @@ MAX_BYTES = 100 * 1024 * 1024
 POOL = ThreadPoolExecutor(max_workers=1)
 LOCK = threading.Lock()
 ACTIVE = ('queued', 'fetching', 'downloading')
+STOP = threading.Event()
+CLAIM = None  # Set only by the on-demand desktop runner.
+
+
+class ImportStopped(BaseException):
+    """Abort the import, including its downloader, without treating it as a bad track."""
+
+
+def check_stopped():
+    if STOP.is_set():
+        raise ImportStopped()
 
 
 def canonical_playlist(value):
@@ -91,8 +103,16 @@ def db():
 
 def save(job):
     if JOB_STORE == 'supabase':
-        rest('music_import_jobs', 'PATCH', params={'id': 'eq.' + job['id']},
-             body={'state': job, 'status': job['status']})
+        params = {'id': 'eq.' + job['id']}
+        if CLAIM:
+            params.update(claimed_by='eq.' + CLAIM, status='in.(fetching,downloading)')
+        rows = rest('music_import_jobs', 'PATCH', params=params,
+                    body={'state': job, 'status': job['status']})
+        if CLAIM and not rows:
+            raise ImportStopped()
+        if CLAIM:
+            print(f"{job['status']}: {job['completed']} added, {job['reused']} reused, "
+                  f"{job['failed']} failed | {job['current_track']}", flush=True)
         return
     with db() as connection:
         connection.execute('UPDATE jobs SET state=? WHERE id=?', (json.dumps(job), job['id']))
@@ -214,6 +234,8 @@ def get_job(job_id: str, user_id: uuid.UUID):
 
 
 def rest(table, method='GET', params=None, body=None):
+    if CLAIM and table not in ('music_import_jobs', 'rpc/renew_music_import'):
+        check_stopped()
     secret = os.environ['SUPABASE_SERVICE_ROLE_KEY']
     base = os.environ['NEXT_PUBLIC_SUPABASE_URL'].rstrip('/').removesuffix('/rest/v1')
     response = requests.request(method, f'{base}/rest/v1/{table}', params=params,
@@ -235,12 +257,23 @@ def bridge(action, value, directory, timeout):
     # Isolate downloader subprocesses from storage/database credentials.
     environment = {key: value for key, value in os.environ.items()
                    if key not in {'MUSIC_IMPORT_WORKER_SECRET', 'SUPABASE_SERVICE_ROLE_KEY',
-                                  'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'}}
+                                  'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'VERCEL_OIDC_TOKEN',
+                                  'VERCEL_TOKEN', 'SUPABASE_ACCESS_TOKEN', 'SUPABASE_DB_PASSWORD'}}
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                env=environment, **options)
     try:
-        code = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
+        deadline = time.monotonic() + timeout
+        while True:
+            check_stopped()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                code = process.wait(timeout=min(0.5, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
+    except BaseException:
         if os.name == 'nt':
             subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
@@ -319,6 +352,7 @@ def run(job):
         bucket = os.getenv('R2_BUCKET_NAME', '')
         linked = set()
         for position, entry in enumerate(entries):
+            check_stopped()
             job['current_track'] = entry['title']
             save(job)
             try:
@@ -339,6 +373,7 @@ def run(job):
                         size = path.stat().st_size
                         if not 0 < size <= MAX_BYTES:
                             raise ValueError('Track exceeds the 100 MB download limit.')
+                        check_stopped()
                         key = f"audio/imports/{uuid.uuid4().hex}.mp3"
                         s3.upload_file(str(path), bucket, key, ExtraArgs={'ContentType': 'audio/mpeg'})
                         stored_key = s3.stored_key(key) if isinstance(s3, AppStorage) else key
@@ -348,7 +383,7 @@ def run(job):
                                 'album': entry.get('album') or None, 'duration': audio.get('duration'),
                                 'file_key': stored_key, 'file_size': size, 'source_url': source,
                             })[0]
-                        except Exception:
+                        except BaseException:
                             s3.delete_object(Bucket=bucket, Key=key)
                             raise
                         track_id = track['id']
@@ -365,6 +400,9 @@ def run(job):
                 job['errors'].append({'title': entry['title'], 'error': track_error(error)})
             save(job)
         job.update(status='complete', current_track='')
+    except (ImportStopped, KeyboardInterrupt):
+        job.update(status='failed', current_track='', error='The PC importer was stopped. Saved songs were kept. Import this playlist again to finish.')
+        raise
     except Exception as error:
         logging.exception('Import %s failed', job['id'])
         message = str(error) if isinstance(error, (ValueError, RuntimeError)) else track_error(error)
