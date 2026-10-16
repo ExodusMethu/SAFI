@@ -1,0 +1,30 @@
+{
+  "mcp": {
+    "servers": {
+      "context7": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@context7/mcp-server"
+        ],
+        "env": {}
+      },
+      "codegraph": {
+        "command": "codegraph",
+        "args": [
+          "mcp"
+        ],
+        "type": "stdio"
+      },
+      "token-cache": {
+        "command": "node",
+        "args": [
+          "c:\\Users\\Shaun\\.vscode\\extensions\\ai-token-optimizer.ai-token-optimizer-0.1.0\\dist\\cache-server.js",
+          "c:\\Users\\Shaun\\OneDrive\\Documents\\New folder\\SAFI"
+        ],
+        "type": "stdio"
+      }
+    }
+  },
+  "sarif-viewer.connectToGithubCodeScanning": "off"
+}
